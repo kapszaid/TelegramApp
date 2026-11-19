@@ -54,19 +54,22 @@ async function apiFetch(url, options) {
         }
         if (text.trim().startsWith('<') || text.includes('<!DOCTYPE')) {
           if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            throw new Error('Server returned an HTML page. Please refresh the page.');
+            throw new Error('Server returned an HTML page. Please ensure server is running.');
           }
-          throw new Error('Server connection error. Please ensure your mobile is connected to the same Wi-Fi network as your PC (http://192.168.0.240:3000) and mobile data is off or Wi-Fi is active.');
+          throw new Error('Server connection error. Please ensure your mobile is connected to the same Wi-Fi network as your PC and mobile data is off or Wi-Fi is active.');
         }
         throw e;
       }
     };
     return res;
   } catch (err) {
-    if (err.message && err.message.includes('Server connection error')) {
+    if (err.message && (err.message.includes('Server connection error') || err.message.includes('Server returned an HTML'))) {
       throw err;
     }
-    throw new Error('Cannot connect to PC server (192.168.0.240:3000). Please check your Wi-Fi connection.');
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      throw new Error('Cannot connect to local server. Server band hai ya chal nahi raha (node server.js).');
+    }
+    throw new Error('Cannot connect to server. Please check your Wi-Fi connection.');
   }
 }
 
