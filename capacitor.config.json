@@ -1,0 +1,9 @@
+{
+  "appId": "com.nexgram.messenger",
+  "appName": "NexGram",
+  "webDir": "public",
+  "server": {
+    "url": "http://192.168.0.240:3000",
+    "cleartext": true
+  }
+}

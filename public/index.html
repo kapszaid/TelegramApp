@@ -1,0 +1,1489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>NexGram</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <div class="app-viewport" id="appViewport">
+    
+    <!-- View Switcher (For PC Testing: Switch between Mobile App View & Full Screen) -->
+    <button class="desktop-switch-pill" onclick="toggleViewportMode()" title="Toggle View">
+      <i class="fa-solid fa-mobile-screen" id="viewModeIcon"></i>
+      <span id="viewModeText">Full Screen Mode</span>
+    </button>
+
+    <!-- ANDROID PHONE FRAME CONTAINER -->
+    <div class="phone-frame">
+      
+      <!-- Phone Status Bar -->
+      <div class="phone-status-bar">
+        <span id="statusBarClock">16:55</span>
+        <div class="status-bar-icons">
+          <i class="fa-solid fa-wifi" style="font-size: 10px;"></i>
+          <i class="fa-solid fa-signal" style="font-size: 10px;"></i>
+          <i class="fa-solid fa-battery-full" style="font-size: 11px;"></i>
+        </div>
+      </div>
+
+      <!-- =========================================================
+           SCREEN 1: CHATS LIST (Telegram Android Main Feed)
+           ========================================================= -->
+      <section class="screen-chats" id="screenChats">
+        
+        <!-- Telegram Top Header -->
+        <header class="tg-app-bar">
+          <div class="tg-app-bar-left">
+            <button class="tg-app-bar-btn" onclick="toggleDrawer(true)" title="Menu">
+              <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="tg-app-title">
+              <span>NexGram</span>
+              <span class="tg-badge-pro">PRO</span>
+            </div>
+          </div>
+
+          <div class="tg-app-bar-right">
+            <!-- Proxy Shield Status Button -->
+            <div class="proxy-badge-shield" id="headerProxyPill" onclick="openProxyManager()" title="Proxy Status">
+              <i class="fa-solid fa-shield-halved"></i>
+              <span id="headerProxyText">Direct</span>
+            </div>
+
+            <!-- Search Button -->
+            <button class="tg-app-bar-btn" onclick="toggleSearchBar()" title="Search">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </button>
+          </div>
+        </header>
+
+        <!-- Inline Search Input (Toggleable) -->
+        <div id="inlineSearchBox" style="display: none; padding: 8px 14px; background: var(--tg-header); border-bottom: 1px solid var(--tg-border);">
+          <input type="text" id="searchInputField" class="tg-input-text" style="margin: 0; padding: 8px 12px; font-size: 14px; border-radius: 18px;" placeholder="Search chats, channels, users..." oninput="handleSearchInput(event)">
+        </div>
+
+        <!-- Folder Tabs -->
+        <nav class="tg-tabs-bar">
+          <button class="tg-tab-item active" data-tab="all" onclick="selectTab('all', this)">
+            All Chats <span class="tg-tab-badge" id="tabBadgeAll">0</span>
+          </button>
+          <button class="tg-tab-item" data-tab="user" onclick="selectTab('user', this)">
+            Personal
+          </button>
+          <button class="tg-tab-item" data-tab="group" onclick="selectTab('group', this)">
+            Groups
+          </button>
+          <button class="tg-tab-item" data-tab="channel" onclick="selectTab('channel', this)">
+            Channels
+          </button>
+        </nav>
+
+        <!-- Chats List Feed -->
+        <div class="tg-chats-list" id="chatsListContainer">
+          <div style="padding: 40px 20px; text-align: center; color: var(--tg-text-muted);">
+            <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 24px; margin-bottom: 12px; color: var(--tg-primary);"></i>
+            <p>Loading Chats...</p>
+          </div>
+        </div>
+
+        <!-- Floating Action Button (Telegram ✏️ Pencil) -->
+        <button class="tg-floating-pencil" onclick="openNewChatAction()" title="New Message">
+          <i class="fa-solid fa-pencil"></i>
+        </button>
+
+      </section>
+
+      <!-- =========================================================
+           SCREEN 2: CONVERSATION SCREEN (Telegram Chat View)
+           ========================================================= -->
+      <section class="screen-conversation" id="screenConversation">
+        
+        <!-- Telegram Dark Doodle Wallpaper -->
+        <div class="tg-wallpaper-layer"></div>
+
+        <!-- Chat Top Bar -->
+        <header class="tg-chat-appbar">
+          <button class="tg-app-bar-btn" onclick="backToChatsList()" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+
+          <div class="tg-chat-avatar color-blue" id="activeChatAvatar" style="width: 40px; height: 40px; font-size: 16px; cursor: pointer;" onclick="openChatProfileInfo()">T</div>
+
+          <div class="tg-chat-userinfo" style="cursor: pointer;" onclick="openChatProfileInfo()">
+            <div class="tg-chat-usertitle" id="activeChatTitle">Chat Title</div>
+            <div class="tg-chat-userstatus" id="activeChatStatus">last seen recently</div>
+          </div>
+
+          <button class="tg-app-bar-btn" title="Search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </button>
+          <button class="tg-app-bar-btn" id="btnChatMore" title="More options" onclick="toggleChatDropdownMenu(event)">
+            <i class="fa-solid fa-ellipsis-vertical"></i>
+          </button>
+        </header>
+
+        <!-- Dropdown Menu for Chat (⋮) -->
+        <div class="tg-dropdown-menu" id="chatDropdownMenu">
+          <div class="tg-dropdown-item" onclick="openChatProfileInfo()">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Chat Info</span>
+          </div>
+          <div class="tg-dropdown-item" id="menuMuteItem" onclick="toggleMuteChatAction()">
+            <i class="fa-solid fa-bell-slash" id="menuMuteIcon"></i>
+            <span id="menuMuteText">Mute Notifications</span>
+          </div>
+          <div class="tg-dropdown-item danger" id="menuLeaveItem" style="display: none;" onclick="leaveChatAction()">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+            <span id="menuLeaveText">Leave Group</span>
+          </div>
+          <div class="tg-dropdown-item danger" onclick="deleteChatAction()">
+            <i class="fa-solid fa-trash"></i>
+            <span>Delete Chat</span>
+          </div>
+        </div>
+
+        <!-- Messages Feed -->
+        <div class="tg-chat-messages" id="messagesListContainer">
+          <!-- Messages will be populated here -->
+        </div>
+
+        <!-- Bottom Input Bar -->
+        <div class="tg-chat-composer">
+          <button class="tg-app-bar-btn" style="color: var(--tg-text-secondary);" title="Emoji">
+            <i class="fa-regular fa-face-smile"></i>
+          </button>
+
+          <input type="text" class="tg-composer-input" id="composerInput" placeholder="Message" onkeydown="handleComposerKey(event)">
+
+          <button class="tg-app-bar-btn" style="color: var(--tg-text-secondary);" title="Attach">
+            <i class="fa-solid fa-paperclip"></i>
+          </button>
+
+          <button class="tg-composer-send-btn" id="composerSendBtn" onclick="sendChatMessage()" title="Send">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </div>
+
+      </section>
+
+      <!-- =========================================================
+           SCREEN 3: CHAT / CONTACT PROFILE INFO (Telegram Profile)
+           ========================================================= -->
+      <section class="screen-profile" id="screenProfile">
+        <!-- Profile Top Bar -->
+        <header class="profile-topbar">
+          <button class="tg-app-bar-btn" onclick="closeChatProfileInfo()" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 16px; font-weight: 600; color: #fff;">Info</span>
+          <button class="tg-app-bar-btn" onclick="toggleMuteChatAction()" title="Mute/Unmute">
+            <i class="fa-solid fa-bell" id="profileMuteHeaderIcon"></i>
+          </button>
+        </header>
+
+        <!-- Profile Hero Avatar & Title -->
+        <div class="profile-hero">
+          <div class="profile-large-avatar color-blue" id="profileAvatar">T</div>
+          <div class="profile-title" id="profileTitle">User Name</div>
+          <div class="profile-subtitle" id="profileSubtitle">online</div>
+        </div>
+
+        <!-- Profile Information Cards -->
+        <div class="profile-content">
+          <!-- Info Card -->
+          <div class="profile-card" id="profileInfoCard">
+            <div class="profile-card-title">Information</div>
+            
+            <div class="profile-info-row" id="profilePhoneRow" style="display: none;">
+              <i class="fa-solid fa-phone"></i>
+              <div class="profile-info-texts">
+                <div class="profile-info-val" id="profilePhoneVal">+1234567890</div>
+                <div class="profile-info-lbl">Phone</div>
+              </div>
+            </div>
+
+            <div class="profile-info-row" id="profileUsernameRow" style="display: none;">
+              <i class="fa-solid fa-at"></i>
+              <div class="profile-info-texts">
+                <div class="profile-info-val" id="profileUsernameVal">@username</div>
+                <div class="profile-info-lbl">Username</div>
+              </div>
+            </div>
+
+            <div class="profile-info-row" id="profileAboutRow" style="display: none;">
+              <i class="fa-solid fa-circle-info"></i>
+              <div class="profile-info-texts">
+                <div class="profile-info-val" id="profileAboutVal">Description</div>
+                <div class="profile-info-lbl">Bio / About</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notifications Setting Card -->
+          <div class="profile-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <i class="fa-regular fa-bell" style="font-size: 18px; color: var(--tg-text-secondary); width: 20px; text-align: center;"></i>
+                <div>
+                  <div style="font-size: 14.5px; font-weight: 500; color: #fff;">Notifications</div>
+                  <div style="font-size: 12px; color: var(--tg-text-secondary);" id="profileNotifyLabel">Enabled</div>
+                </div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="profileNotifyToggle" onchange="toggleMuteChatAction()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Danger Actions Card -->
+          <div class="profile-card" style="padding: 10px;">
+            <button class="profile-danger-btn" id="profileLeaveBtn" style="display: none;" onclick="leaveChatAction()">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i>
+              <span id="profileLeaveText">Leave Group</span>
+            </button>
+            <button class="profile-danger-btn" onclick="deleteChatAction()">
+              <i class="fa-solid fa-trash"></i>
+              <span>Delete Chat / Clear History</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           SCREEN 4: USER SETTINGS & LOGOUT (Telegram Android Settings)
+           ========================================================= -->
+      <section class="screen-settings" id="screenSettings">
+        <!-- Settings Header -->
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSettingsScreen()" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Settings</span>
+          <div style="display: flex; gap: 4px;">
+            <button class="tg-app-bar-btn" title="Search Settings" onclick="alert('Search settings...')">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </button>
+            <button class="tg-app-bar-btn" title="More options" onclick="toggleSettingsDropdown(event)">
+              <i class="fa-solid fa-ellipsis-vertical"></i>
+            </button>
+          </div>
+        </header>
+
+        <!-- Dropdown Menu for Settings (⋮) -->
+        <div class="tg-dropdown-menu" id="settingsDropdownMenu" style="right: 12px; top: 52px;">
+          <div class="tg-dropdown-item" onclick="openEditNameScreen()">
+            <i class="fa-solid fa-pen"></i>
+            <span>Edit Name</span>
+          </div>
+          <div class="tg-dropdown-item" onclick="openEditPhotoSheet()">
+            <i class="fa-solid fa-camera"></i>
+            <span>Set New Photo</span>
+          </div>
+          <div class="tg-dropdown-item danger" onclick="openLogoutModal()">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+            <span>Log Out</span>
+          </div>
+        </div>
+
+        <div class="settings-scroll-content">
+          <!-- Profile Card Hero -->
+          <div class="settings-hero">
+            <div class="settings-avatar-wrap">
+              <div class="settings-large-avatar color-blue" id="settingsAvatar">T</div>
+              <div class="settings-avatar-badge" title="Set Profile Photo" onclick="openEditPhotoSheet()">
+                <i class="fa-solid fa-camera"></i>
+              </div>
+            </div>
+            <div class="settings-hero-name" id="settingsUserName" onclick="openEditNameScreen()" style="cursor: pointer;">User Name</div>
+            <div class="settings-hero-status" id="settingsUserStatus">online</div>
+          </div>
+
+          <!-- Section: Account -->
+          <div class="settings-group">
+            <div class="settings-group-title">Account</div>
+            
+            <div class="settings-row" onclick="openChangePhoneSheet()">
+              <div class="settings-row-icon"><i class="fa-solid fa-phone"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text" id="settingsPhone">+91 0000000000</div>
+                <div class="settings-row-sub">Tap to change phone number</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openEditUsernameScreen()">
+              <div class="settings-row-icon"><i class="fa-solid fa-at"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text" id="settingsUsername">None</div>
+                <div class="settings-row-sub">Username</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openEditBioScreen()">
+              <div class="settings-row-icon"><i class="fa-solid fa-circle-info"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text" id="settingsBio">NexGram Android Client</div>
+                <div class="settings-row-sub">Bio</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Settings -->
+          <div class="settings-group">
+            <div class="settings-group-title">Settings</div>
+
+            <div class="settings-row" onclick="openProxyManager()">
+              <div class="settings-row-icon" style="color: #4cd964;"><i class="fa-solid fa-shield-halved"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Proxy Settings</div>
+                <div class="settings-row-sub" id="settingsProxySub">Direct connection (Anti-Freeze ready)</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openChatSettingsScreen()">
+              <div class="settings-row-icon" style="color: #3390ec;"><i class="fa-regular fa-comment-dots"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Chat Settings</div>
+                <div class="settings-row-sub">Wallpaper, text size, animations</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openPrivacyScreen()">
+              <div class="settings-row-icon" style="color: #a282f7;"><i class="fa-solid fa-lock"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Privacy and Security</div>
+                <div class="settings-row-sub">Blocked users, active sessions, 2FA</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openNotificationsScreen()">
+              <div class="settings-row-icon" style="color: #ff9f1a;"><i class="fa-regular fa-bell"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Notifications and Sounds</div>
+                <div class="settings-row-sub">Messages, groups, channels</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openDataStorageScreen()">
+              <div class="settings-row-icon" style="color: #00c0f3;"><i class="fa-solid fa-database"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Data and Storage</div>
+                <div class="settings-row-sub">Storage usage, media auto-download</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openPowerSavingScreen()">
+              <div class="settings-row-icon" style="color: #f77f00;"><i class="fa-solid fa-battery-half"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Power Saving</div>
+                <div class="settings-row-sub">Background animations, battery</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openFoldersScreen()">
+              <div class="settings-row-icon" style="color: #2ec4b6;"><i class="fa-regular fa-folder"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Chat Folders</div>
+                <div class="settings-row-sub">Tabs customization</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openDevicesScreen()">
+              <div class="settings-row-icon" style="color: #e63946;"><i class="fa-solid fa-mobile-screen"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Devices</div>
+                <div class="settings-row-sub" id="settingsDevicesSub">Active sessions, linked desktop</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openLanguageScreen()">
+              <div class="settings-row-icon" style="color: #8338ec;"><i class="fa-solid fa-globe"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Language</div>
+                <div class="settings-row-sub" id="settingsCurrentLang">English</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Help & Tools -->
+          <div class="settings-group">
+            <div class="settings-group-title">Help & Tools</div>
+
+            <div class="settings-row" onclick="copyCurrentSession()">
+              <div class="settings-row-icon"><i class="fa-regular fa-copy"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Export StringSession</div>
+                <div class="settings-row-sub">Backup session to clipboard</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openApkDownloadModal()">
+              <div class="settings-row-icon" style="color: #4cd964;"><i class="fa-solid fa-download"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Download Latest APK</div>
+                <div class="settings-row-sub">NexGram v13.2.2</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Prominent Red Log Out Button Section -->
+          <div class="settings-logout-section">
+            <button class="settings-logout-action-btn" onclick="openLogoutModal()">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i>
+              <span>Log Out</span>
+            </button>
+          </div>
+
+          <div style="text-align: center; color: var(--tg-text-muted); font-size: 12px; padding: 12px 20px 30px;">
+            NexGram for Android v13.2.2 (Build 2026)<br>
+            Powered by Telegram MTProto
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           SETTINGS SUB-SCREENS (TELEGRAM ANDROID EXACT CLONES)
+           ========================================================= -->
+
+      <!-- 1. DEVICES & ACTIVE SESSIONS SCREEN -->
+      <section class="settings-subscreen" id="subDevices">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subDevices')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Devices</span>
+          <button class="tg-app-bar-btn" onclick="startQrCodeAuth(); openLoginModal();" title="Link Desktop Device">
+            <i class="fa-solid fa-qrcode"></i>
+          </button>
+        </header>
+
+        <div class="settings-scroll-content">
+          <!-- Current Device Card -->
+          <div style="padding: 14px 20px 4px; font-size: 13px; font-weight: 700; color: var(--tg-primary); text-transform: uppercase;">
+            This Device
+          </div>
+          <div class="tg-device-card" style="margin: 0 16px 14px; background: var(--tg-surface); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--tg-border); display: flex; align-items: center; gap: 14px;">
+            <div style="width: 44px; height: 44px; border-radius: 50%; background: #4cd964; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">
+              <i class="fa-brands fa-android"></i>
+            </div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-size: 15.5px; font-weight: 700; color: #fff;" id="thisDeviceModel">This Device</div>
+              <div style="font-size: 13px; color: var(--tg-text-secondary); margin-top: 2px;">NexGram 13.2.2.0 • Online</div>
+              <div style="font-size: 12px; color: #4cd964; margin-top: 2px;" id="thisDeviceLocation">Mumbai, India</div>
+            </div>
+          </div>
+
+          <!-- Terminate All Other Sessions Button -->
+          <div style="padding: 0 16px 14px;">
+            <button class="profile-danger-btn" onclick="terminateAllOtherSessionsAction()" style="margin: 0; padding: 13px 16px; background: rgba(255, 89, 90, 0.12); border: 1px solid rgba(255, 89, 90, 0.35); border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #ff595a; font-weight: 600; width: 100%;">
+              <i class="fa-solid fa-hand"></i>
+              <span>Terminate All Other Sessions</span>
+            </button>
+            <div style="font-size: 12px; color: var(--tg-text-secondary); margin-top: 6px; text-align: center;">
+              Logs out all devices except for this one.
+            </div>
+          </div>
+
+          <!-- Active Sessions List from Telegram API -->
+          <div style="padding: 14px 20px 8px; font-size: 13px; font-weight: 700; color: var(--tg-primary); text-transform: uppercase;">
+            Active Sessions
+          </div>
+          <div id="activeSessionsListContainer" style="margin: 0 16px 20px; background: var(--tg-surface); border-radius: 12px; border: 1px solid var(--tg-border); overflow: hidden;">
+            <div style="padding: 24px; text-align: center; color: var(--tg-text-secondary);">
+              <i class="fa-solid fa-circle-notch fa-spin"></i> Loading active sessions...
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. CHAT SETTINGS SCREEN -->
+      <section class="settings-subscreen" id="subChatSettings">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subChatSettings')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Chat Settings</span>
+          <div style="width: 40px;"></div>
+        </header>
+
+        <div class="settings-scroll-content">
+          <!-- Text Size Preview -->
+          <div style="padding: 16px 20px 8px; font-size: 13px; font-weight: 700; color: var(--tg-primary); text-transform: uppercase;">
+            Message Text Size
+          </div>
+          <div style="margin: 0 16px 14px; background: var(--tg-surface); border-radius: 12px; padding: 16px; border: 1px solid var(--tg-border);">
+            <div class="tg-message-bubble incoming" style="margin-bottom: 8px; max-width: 85%;">
+              <div class="tg-bubble-body" id="previewIncomingText" style="font-size: 15px;">Here is a preview of the message text size! Looks clean and comfortable.</div>
+              <div class="tg-bubble-meta">
+                <span class="tg-bubble-time">19:15</span>
+              </div>
+            </div>
+            <div class="tg-message-bubble outgoing" style="margin-left: auto; max-width: 85%;">
+              <div class="tg-bubble-body" id="previewOutgoingText" style="font-size: 15px;">Do you like this text size? 🚀</div>
+              <div class="tg-bubble-meta">
+                <span class="tg-bubble-time">19:16</span>
+                <i class="fa-solid fa-check-double tg-read-check"></i>
+              </div>
+            </div>
+
+            <!-- Slider -->
+            <div style="display: flex; align-items: center; gap: 14px; margin-top: 18px;">
+              <span style="font-size: 13px; color: var(--tg-text-secondary);">12</span>
+              <input type="range" id="textSizeSlider" min="12" max="24" value="15" style="flex: 1; accent-color: var(--tg-primary);" oninput="updateTextSizePreview(this.value)">
+              <span style="font-size: 13px; color: var(--tg-text-secondary);">24</span>
+              <span style="font-size: 14px; font-weight: 700; color: var(--tg-primary); min-width: 32px;" id="textSizeLabel">15px</span>
+            </div>
+          </div>
+
+          <!-- Chat Wallpaper Selection -->
+          <div style="padding: 14px 20px 8px; font-size: 13px; font-weight: 700; color: var(--tg-primary); text-transform: uppercase;">
+            Chat Wallpaper & Theme
+          </div>
+          <div style="margin: 0 16px 14px; background: var(--tg-surface); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--tg-border); display: flex; gap: 12px; overflow-x: auto;">
+            <div class="theme-chip selected" onclick="selectThemeWallpaper('doodle', this)" style="flex: 0 0 70px; text-align: center; cursor: pointer;">
+              <div style="width: 70px; height: 90px; border-radius: 8px; background: #0e1621; border: 2px solid var(--tg-primary); display: flex; align-items: center; justify-content: center; color: var(--tg-primary); margin-bottom: 6px;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              </div>
+              <span style="font-size: 11.5px; color: #fff;">Doodle</span>
+            </div>
+            <div class="theme-chip" onclick="selectThemeWallpaper('midnight', this)" style="flex: 0 0 70px; text-align: center; cursor: pointer;">
+              <div style="width: 70px; height: 90px; border-radius: 8px; background: #000000; border: 2px solid rgba(255,255,255,0.1); margin-bottom: 6px;"></div>
+              <span style="font-size: 11.5px; color: #fff;">Midnight</span>
+            </div>
+            <div class="theme-chip" onclick="selectThemeWallpaper('arctic', this)" style="flex: 0 0 70px; text-align: center; cursor: pointer;">
+              <div style="width: 70px; height: 90px; border-radius: 8px; background: #0e2721; border: 2px solid rgba(255,255,255,0.1); margin-bottom: 6px;"></div>
+              <span style="font-size: 11.5px; color: #fff;">Arctic</span>
+            </div>
+            <div class="theme-chip" onclick="selectThemeWallpaper('ocean', this)" style="flex: 0 0 70px; text-align: center; cursor: pointer;">
+              <div style="width: 70px; height: 90px; border-radius: 8px; background: #0f2b48; border: 2px solid rgba(255,255,255,0.1); margin-bottom: 6px;"></div>
+              <span style="font-size: 11.5px; color: #fff;">Ocean</span>
+            </div>
+          </div>
+
+          <!-- Toggles Group -->
+          <div class="settings-group">
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Send by Enter</div>
+                <div class="settings-row-sub">Press Enter on physical keyboard to send</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggleSendByEnter" checked onchange="saveChatSetting('sendByEnter', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Save to Gallery</div>
+                <div class="settings-row-sub">Automatically save incoming photos to phone</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggleSaveGallery" onchange="saveChatSetting('saveGallery', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Large Emojis</div>
+                <div class="settings-row-sub">Draw emoji without text larger</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggleLargeEmojis" checked onchange="saveChatSetting('largeEmojis', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. PRIVACY AND SECURITY SCREEN -->
+      <section class="settings-subscreen" id="subPrivacy">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subPrivacy')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Privacy and Security</span>
+          <div style="width: 40px;"></div>
+        </header>
+
+        <div class="settings-scroll-content">
+          <div class="settings-group">
+            <div class="settings-group-title">Privacy</div>
+
+            <div class="settings-row" onclick="openPrivacyChoice('Blocked Users', ['0 Users'])">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Blocked Users</div>
+                <div class="settings-row-sub" id="privBlockedUsers">0 Users</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openPrivacyChoice('Phone Number', ['Everybody', 'My Contacts', 'Nobody'], 'privPhoneNumber')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Phone Number</div>
+                <div class="settings-row-sub" id="privPhoneNumber">My Contacts</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openPrivacyChoice('Last Seen & Online', ['Everybody', 'My Contacts', 'Nobody'], 'privLastSeen')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Last Seen & Online</div>
+                <div class="settings-row-sub" id="privLastSeen">My Contacts</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openPrivacyChoice('Profile Photos', ['Everybody', 'My Contacts', 'Nobody'], 'privPhotos')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Profile Photos</div>
+                <div class="settings-row-sub" id="privPhotos">Everybody</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openPrivacyChoice('Calls', ['Everybody', 'My Contacts', 'Nobody'], 'privCalls')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Calls</div>
+                <div class="settings-row-sub" id="privCalls">Everybody</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Security</div>
+
+            <div class="settings-row" onclick="openTwoFactorSetup()">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Two-Step Verification (2FA)</div>
+                <div class="settings-row-sub" style="color: #4cd964;">Protected</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openDevicesScreen()">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Active Sessions</div>
+                <div class="settings-row-sub" id="privSessionsCount">2 active devices</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Advanced</div>
+            <div class="settings-row" onclick="openPrivacyChoice('Delete my account if away for', ['1 month', '3 months', '6 months', '1 year'], 'privAccountTtl')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Delete my account</div>
+                <div class="settings-row-sub" id="privAccountTtl">If away for 6 months</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. NOTIFICATIONS AND SOUNDS SCREEN -->
+      <section class="settings-subscreen" id="subNotifications">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subNotifications')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Notifications and Sounds</span>
+          <div style="width: 40px;"></div>
+        </header>
+
+        <div class="settings-scroll-content">
+          <div class="settings-group">
+            <div class="settings-group-title">Message Notifications</div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Private Chats</div>
+                <div class="settings-row-sub">Tap to change sound and vibration</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notifPrivate" checked onchange="saveNotifSetting('private', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Groups</div>
+                <div class="settings-row-sub">Enabled for all groups</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notifGroups" checked onchange="saveNotifSetting('groups', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Channels</div>
+                <div class="settings-row-sub">Enabled for all channels</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notifChannels" checked onchange="saveNotifSetting('channels', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">In-App Notifications</div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">In-App Sounds</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notifSounds" checked onchange="saveNotifSetting('sounds', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">In-App Vibrate</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notifVibrate" checked onchange="saveNotifSetting('vibrate', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">In-App Preview</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notifPreview" checked onchange="saveNotifSetting('preview', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Badge Counter</div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Include Muted Chats</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="badgeMuted" onchange="saveNotifSetting('badgeMuted', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Count Unread Messages</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="badgeCount" checked onchange="saveNotifSetting('badgeCount', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. DATA AND STORAGE SCREEN -->
+      <section class="settings-subscreen" id="subData">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subData')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Data and Storage</span>
+          <div style="width: 40px;"></div>
+        </header>
+
+        <div class="settings-scroll-content">
+          <div class="settings-group">
+            <div class="settings-group-title">Disk and Network Usage</div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-icon"><i class="fa-solid fa-hard-drive"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Storage Usage</div>
+                <div class="settings-row-sub" id="storageUsageSub">Cached Media: 18.4 MB</div>
+              </div>
+              <button class="tg-btn-ghost" style="padding: 6px 14px; font-size: 13px;" onclick="clearAppCacheAction()">
+                Clear Cache
+              </button>
+            </div>
+
+            <div class="settings-row" onclick="alert('Network Usage: Sent 1.2 MB • Received 4.8 MB')">
+              <div class="settings-row-icon"><i class="fa-solid fa-chart-pie"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Network Usage</div>
+                <div class="settings-row-sub">Sent: 1.2 MB • Received: 4.8 MB</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Automatic Media Download</div>
+
+            <div class="settings-row" onclick="openPrivacyChoice('When using mobile data', ['Photos only', 'Photos and Videos', 'Disabled'], 'autoDataMobile')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">When using mobile data</div>
+                <div class="settings-row-sub" id="autoDataMobile">Photos only</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openPrivacyChoice('When connected to Wi-Fi', ['All media', 'Photos only', 'Disabled'], 'autoDataWifi')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">When connected to Wi-Fi</div>
+                <div class="settings-row-sub" id="autoDataWifi">All media</div>
+              </div>
+            </div>
+
+            <div class="settings-row" onclick="openPrivacyChoice('When roaming', ['Disabled', 'Photos only'], 'autoDataRoaming')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">When roaming</div>
+                <div class="settings-row-sub" id="autoDataRoaming">Disabled</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Proxy Settings (Anti-Freeze)</div>
+
+            <div class="settings-row" onclick="openProxyManager()">
+              <div class="settings-row-icon" style="color: #4cd964;"><i class="fa-solid fa-shield-halved"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Proxy Settings</div>
+                <div class="settings-row-sub">SOCKS5, SOCKS4 and MTProto proxies</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. CHAT FOLDERS SCREEN -->
+      <section class="settings-subscreen" id="subFolders">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subFolders')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Chat Folders</span>
+          <div style="width: 40px;"></div>
+        </header>
+
+        <div class="settings-scroll-content">
+          <div style="padding: 20px 24px 10px; text-align: center;">
+            <i class="fa-regular fa-folder-open" style="font-size: 44px; color: var(--tg-primary); margin-bottom: 12px; display: inline-block;"></i>
+            <h4 style="font-size: 16px; margin-bottom: 6px;">Chat Folders</h4>
+            <p style="font-size: 13.5px; color: var(--tg-text-secondary); line-height: 1.5;">
+              Create tabs for different types of chats and quickly switch between them on your home screen.
+            </p>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Active Tabs</div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-icon" style="color: var(--tg-primary);"><i class="fa-solid fa-bars-staggered"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">All Chats</div>
+                <div class="settings-row-sub">All incoming messages</div>
+              </div>
+              <span style="font-size: 12px; color: var(--tg-primary); font-weight: 700;">DEFAULT</span>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-icon" style="color: #3390ec;"><i class="fa-regular fa-user"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Personal</div>
+                <div class="settings-row-sub">Direct 1-on-1 private conversations</div>
+              </div>
+              <i class="fa-solid fa-check" style="color: #4cd964;"></i>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-icon" style="color: #2ec4b6;"><i class="fa-solid fa-user-group"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Groups</div>
+                <div class="settings-row-sub">Group chats and communities</div>
+              </div>
+              <i class="fa-solid fa-check" style="color: #4cd964;"></i>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-icon" style="color: #f77f00;"><i class="fa-solid fa-bullhorn"></i></div>
+              <div class="settings-row-content">
+                <div class="settings-row-text">Channels</div>
+                <div class="settings-row-sub">Broadcast channels & updates</div>
+              </div>
+              <i class="fa-solid fa-check" style="color: #4cd964;"></i>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. LANGUAGE SCREEN -->
+      <section class="settings-subscreen" id="subLanguage">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subLanguage')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Language</span>
+          <div style="width: 40px;"></div>
+        </header>
+
+        <div class="settings-scroll-content">
+          <div class="settings-group" style="margin-top: 0;">
+            <div class="settings-row lang-row" onclick="selectAppLanguage('English', 'en')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">English</div>
+                <div class="settings-row-sub">English</div>
+              </div>
+              <i class="fa-solid fa-check lang-check" id="checkLang_en" style="color: var(--tg-primary);"></i>
+            </div>
+
+            <div class="settings-row lang-row" onclick="selectAppLanguage('हिन्दी (Hindi)', 'hi')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">हिन्दी</div>
+                <div class="settings-row-sub">Hindi</div>
+              </div>
+              <i class="fa-solid fa-check lang-check" id="checkLang_hi" style="color: var(--tg-primary); display: none;"></i>
+            </div>
+
+            <div class="settings-row lang-row" onclick="selectAppLanguage('العربية (Arabic)', 'ar')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">العربية</div>
+                <div class="settings-row-sub">Arabic</div>
+              </div>
+              <i class="fa-solid fa-check lang-check" id="checkLang_ar" style="color: var(--tg-primary); display: none;"></i>
+            </div>
+
+            <div class="settings-row lang-row" onclick="selectAppLanguage('Русский (Russian)', 'ru')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Русский</div>
+                <div class="settings-row-sub">Russian</div>
+              </div>
+              <i class="fa-solid fa-check lang-check" id="checkLang_ru" style="color: var(--tg-primary); display: none;"></i>
+            </div>
+
+            <div class="settings-row lang-row" onclick="selectAppLanguage('Español (Spanish)', 'es')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Español</div>
+                <div class="settings-row-sub">Spanish</div>
+              </div>
+              <i class="fa-solid fa-check lang-check" id="checkLang_es" style="color: var(--tg-primary); display: none;"></i>
+            </div>
+
+            <div class="settings-row lang-row" onclick="selectAppLanguage('Français (French)', 'fr')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Français</div>
+                <div class="settings-row-sub">French</div>
+              </div>
+              <i class="fa-solid fa-check lang-check" id="checkLang_fr" style="color: var(--tg-primary); display: none;"></i>
+            </div>
+
+            <div class="settings-row lang-row" onclick="selectAppLanguage('Deutsch (German)', 'de')">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Deutsch</div>
+                <div class="settings-row-sub">German</div>
+              </div>
+              <i class="fa-solid fa-check lang-check" id="checkLang_de" style="color: var(--tg-primary); display: none;"></i>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. POWER SAVING SCREEN -->
+      <section class="settings-subscreen" id="subPowerSaving">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subPowerSaving')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Power Saving</span>
+          <div style="width: 40px;"></div>
+        </header>
+
+        <div class="settings-scroll-content">
+          <div class="settings-group" style="margin-top: 10px;">
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Animations in Chats</div>
+                <div class="settings-row-sub">Smooth sliding bubbles & wallpaper effects</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" checked id="pwrAnim">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Autoplay GIFs</div>
+                <div class="settings-row-sub">Play animated GIFs automatically</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" checked id="pwrGifs">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="settings-row" style="cursor: default;">
+              <div class="settings-row-content">
+                <div class="settings-row-text">Autoplay Videos</div>
+                <div class="settings-row-sub">Start playing videos automatically without sound</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="pwrVideos">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9. EDIT USERNAME SCREEN (TELEGRAM SAVE ✓) -->
+      <section class="settings-subscreen" id="subEditUsername">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subEditUsername')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Username</span>
+          <button class="tg-app-bar-btn" onclick="saveUsernameAction()" title="Save Username" style="color: var(--tg-primary); font-size: 18px;">
+            <i class="fa-solid fa-check"></i>
+          </button>
+        </header>
+
+        <div class="settings-scroll-content" style="padding: 24px 20px;">
+          <label style="font-size: 13px; font-weight: 600; color: var(--tg-primary); display: block; margin-bottom: 8px;">
+            Set your public username
+          </label>
+          <div style="position: relative; margin-bottom: 12px;">
+            <span style="position: absolute; left: 14px; top: 13px; font-size: 16px; color: var(--tg-primary); font-weight: 700;">@</span>
+            <input type="text" class="tg-input-text" id="inputEditUsername" placeholder="username" style="padding-left: 34px; font-size: 16px;" oninput="updateUsernameLinkPreview(this.value)">
+          </div>
+
+          <div style="font-size: 13.5px; color: var(--tg-text-secondary); line-height: 1.5; margin-bottom: 20px;">
+            You can choose a username on Telegram. If you do, people will be able to find you by this username and contact you without needing your phone number.<br><br>
+            You can use <strong>a-z</strong>, <strong>0-9</strong> and underscores. Minimum length is 5 characters.
+          </div>
+
+          <div style="background: var(--tg-surface); padding: 14px 16px; border-radius: 10px; border: 1px solid var(--tg-border);">
+            <div style="font-size: 12px; color: var(--tg-text-secondary); margin-bottom: 4px;">This link opens a chat with you:</div>
+            <div style="font-size: 14.5px; color: var(--tg-primary); font-weight: 600; word-break: break-all;" id="usernameLinkPreview">https://t.me/</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 10. EDIT BIO SCREEN (TELEGRAM 70 CHARACTERS ✓) -->
+      <section class="settings-subscreen" id="subEditBio">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subEditBio')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Bio</span>
+          <button class="tg-app-bar-btn" onclick="saveBioAction()" title="Save Bio" style="color: var(--tg-primary); font-size: 18px;">
+            <i class="fa-solid fa-check"></i>
+          </button>
+        </header>
+
+        <div class="settings-scroll-content" style="padding: 24px 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label style="font-size: 13px; font-weight: 600; color: var(--tg-primary);">
+              Bio
+            </label>
+            <span style="font-size: 13px; color: var(--tg-text-secondary);" id="bioCharCounter">0 / 70</span>
+          </div>
+
+          <textarea class="tg-input-text" id="inputEditBio" rows="3" maxlength="70" placeholder="A few words about yourself" style="font-size: 15.5px; resize: none; margin-bottom: 12px;" oninput="updateBioCounter(this.value)"></textarea>
+
+          <div style="font-size: 13.5px; color: var(--tg-text-secondary); line-height: 1.5;">
+            Any details such as age, occupation or city.<br>
+            Example: <em>23 y.o. designer from San Francisco.</em>
+          </div>
+        </div>
+      </section>
+
+      <!-- 11. EDIT NAME SCREEN (TELEGRAM SAVE ✓) -->
+      <section class="settings-subscreen" id="subEditName">
+        <header class="settings-topbar">
+          <button class="tg-app-bar-btn" onclick="closeSubScreen('subEditName')" title="Back">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <span style="font-size: 17px; font-weight: 600; color: #fff;">Edit Name</span>
+          <button class="tg-app-bar-btn" onclick="saveNameAction()" title="Save Name" style="color: var(--tg-primary); font-size: 18px;">
+            <i class="fa-solid fa-check"></i>
+          </button>
+        </header>
+
+        <div class="settings-scroll-content" style="padding: 24px 20px;">
+          <div style="margin-bottom: 16px;">
+            <label style="font-size: 13px; font-weight: 600; color: var(--tg-primary); display: block; margin-bottom: 6px;">
+              First name (required)
+            </label>
+            <input type="text" class="tg-input-text" id="inputFirstName" placeholder="First name" style="font-size: 16px;">
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="font-size: 13px; font-weight: 600; color: var(--tg-primary); display: block; margin-bottom: 6px;">
+              Last name (optional)
+            </label>
+            <input type="text" class="tg-input-text" id="inputLastName" placeholder="Last name" style="font-size: 16px;">
+          </div>
+        </div>
+      </section>
+
+      <!-- 12. GENERAL PRIVACY CHOICE BOTTOM SHEET / DIALOG -->
+      <div class="tg-modal-backdrop" id="privacyChoiceModal" onclick="handlePrivacyChoiceBackdrop(event)">
+        <div class="tg-modal-box" style="max-width: 340px; padding: 20px 20px 14px;">
+          <div style="font-size: 17px; font-weight: 700; color: #fff; margin-bottom: 14px;" id="privacyChoiceTitle">Privacy Setting</div>
+          <div id="privacyOptionsContainer" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px;">
+            <!-- Options dynamically added -->
+          </div>
+          <div style="text-align: right;">
+            <button class="tg-btn-ghost" onclick="closePrivacyChoiceModal()">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================================
+           NAVIGATION DRAWER (Slide-in Menu from Left)
+           ========================================================= -->
+      <div class="tg-drawer-backdrop" id="drawerBackdrop" onclick="handleDrawerBackdropClick(event)">
+        <div class="tg-drawer-panel">
+          
+          <!-- User Profile Card -->
+          <div class="tg-drawer-header-card">
+            <div class="tg-drawer-user-avatar" id="drawerUserAvatar" onclick="openSettingsScreen()" title="Settings">T</div>
+            
+            <div class="tg-drawer-user-meta" onclick="toggleDrawerAccounts()">
+              <div>
+                <div class="tg-drawer-user-title" id="drawerUserName">NexGram User</div>
+                <div class="tg-drawer-user-phone" id="drawerUserPhone">+91 0000000000</div>
+              </div>
+              <i class="fa-solid fa-chevron-down" id="drawerChevron" style="font-size: 13px; color: var(--tg-text-secondary); transition: transform 0.2s;"></i>
+            </div>
+
+            <!-- Expandable Multiple Accounts Switcher (Telegram Android Style) -->
+            <div class="drawer-accounts-list" id="drawerAccountsList">
+              <!-- Dynamically populated with all logged-in accounts -->
+            </div>
+          </div>
+
+          <!-- Drawer Menu Items (Telegram Android Clone) -->
+          <div class="tg-drawer-menu">
+            <div class="tg-drawer-row" onclick="openNewGroupAction()">
+              <i class="fa-solid fa-user-group"></i>
+              <span>New Group</span>
+            </div>
+            <div class="tg-drawer-row" onclick="openContactsAction()">
+              <i class="fa-regular fa-user"></i>
+              <span>Contacts</span>
+            </div>
+            <div class="tg-drawer-row" onclick="openCallsAction()">
+              <i class="fa-solid fa-phone"></i>
+              <span>Calls</span>
+            </div>
+            <div class="tg-drawer-row" onclick="openSavedMessagesChat()">
+              <i class="fa-regular fa-bookmark"></i>
+              <span>Saved Messages</span>
+            </div>
+            <div class="tg-drawer-row" onclick="openSettingsScreen()">
+              <i class="fa-solid fa-gear"></i>
+              <span>Settings</span>
+            </div>
+            <div class="tg-drawer-row" onclick="openProxyManager()">
+              <i class="fa-solid fa-shield-halved"></i>
+              <span>Proxy Settings</span>
+            </div>
+
+            <div class="tg-drawer-sep"></div>
+
+            <div class="tg-drawer-row" onclick="openApkDownloadModal()" style="color: #4cd964; font-weight: 600;">
+              <i class="fa-solid fa-mobile-screen-button" style="color: #4cd964;"></i>
+              <span>Install APK on Phone</span>
+            </div>
+            <div class="tg-drawer-row" onclick="openLoginModal()">
+              <i class="fa-solid fa-user-plus"></i>
+              <span>Add Account</span>
+            </div>
+            <div class="tg-drawer-row" onclick="copyCurrentSession()">
+              <i class="fa-regular fa-copy"></i>
+              <span>Export StringSession</span>
+            </div>
+
+            <div class="tg-drawer-sep"></div>
+
+            <!-- Red Logout Option directly in Drawer -->
+            <div class="tg-drawer-row tg-drawer-logout-row" onclick="openLogoutModal()">
+              <i class="fa-solid fa-arrow-right-from-bracket" style="color: #ff595a;"></i>
+              <span style="color: #ff595a; font-weight: 600;">Log Out</span>
+            </div>
+
+            <div class="tg-drawer-row" style="color: var(--tg-text-secondary); font-size: 12px; padding-top: 4px;">
+              <span>NexGram v13.2.2</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- =========================================================
+           AUTHENTIC TELEGRAM LOGIN / AUTH MODAL
+           ========================================================= -->
+      <div class="tg-modal-backdrop" id="authModal" onclick="handleAuthBackdropClick(event)">
+        <div class="tg-modal-box" style="position: relative;">
+          
+          <!-- Close (✕) Button -->
+          <button class="tg-app-bar-btn" id="btnAuthClose" style="position: absolute; top: 12px; right: 12px; z-index: 10;" onclick="closeLoginModal()" title="Close">
+            <i class="fa-solid fa-xmark" style="font-size: 18px; color: var(--tg-text-secondary);"></i>
+          </button>
+          
+          <div class="tg-modal-header">
+            <div class="tg-modal-logo">
+              <i class="fa-solid fa-paper-plane"></i>
+            </div>
+            <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 4px;" id="authModalTitle">Sign in to NexGram</h3>
+            <p style="font-size: 13px; color: var(--tg-text-secondary);" id="authModalSubtitle">Enter your country code and phone number.</p>
+          </div>
+
+          <div class="tg-modal-body">
+            
+            <!-- Auth Mode Switcher Tabs (Phone vs QR Code) -->
+            <div class="auth-mode-tabs" id="authModeTabs">
+              <button class="auth-mode-tab active" id="tabPhoneLogin" onclick="switchAuthMode('phone')">
+                <i class="fa-solid fa-phone" style="margin-right: 4px;"></i> Phone Number
+              </button>
+              <button class="auth-mode-tab" id="tabQrLogin" onclick="switchAuthMode('qr')">
+                <i class="fa-solid fa-qrcode" style="margin-right: 4px;"></i> Scan QR Code
+              </button>
+            </div>
+
+            <!-- Quick QR Code Login View -->
+            <div id="stepQrLogin" style="display: none;">
+              <div class="qr-login-box">
+                <div class="qr-code-frame" id="qrCodeFrame">
+                  <div id="qrLoadingSpinner" style="width: 190px; height: 190px; display: flex; align-items: center; justify-content: center; color: var(--tg-primary);">
+                    <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 32px;"></i>
+                  </div>
+                  <img id="qrCodeImage" src="" alt="Telegram Login QR" style="display: none; width: 190px; height: 190px;">
+                </div>
+
+                <div class="qr-instructions-list">
+                  <div>1. Open your Telegram app on phone</div>
+                  <div>2. Go to <strong>Settings > Devices > Link Desktop Device</strong></div>
+                  <div>3. Point your phone at this screen to confirm</div>
+                </div>
+
+                <button class="tg-btn-ghost" style="font-size: 12px; padding: 6px 14px;" onclick="startQrCodeAuth()">
+                  <i class="fa-solid fa-rotate-right"></i> Refresh QR Code
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 1: Phone + Proxy -->
+            <div id="stepPhone">
+              <label class="tg-form-label">Phone Number</label>
+              <input type="tel" class="tg-input-text" id="inputPhone" placeholder="+91 98765 43210" style="font-size: 16px;">
+
+              <!-- Proxy Settings for this Account -->
+              <div class="tg-proxy-card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="checkProxyToggle" onchange="toggleProxyForm()">
+                    <span>Use Proxy (Anti-Freeze)</span>
+                  </label>
+                  <span id="proxyPingResult" style="font-size: 11px;"></span>
+                </div>
+
+                <div id="proxyFieldsBox" style="display: none; margin-top: 10px;">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                    <div>
+                      <label class="tg-form-label">Type</label>
+                      <select class="tg-input-text" id="inputProxyType" style="padding: 8px; margin-bottom: 0;">
+                        <option value="SOCKS5">SOCKS5</option>
+                        <option value="SOCKS4">SOCKS4</option>
+                        <option value="MTPROXY">MTProto Proxy</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="tg-form-label">Port</label>
+                      <input type="number" class="tg-input-text" id="inputProxyPort" placeholder="1080" style="padding: 8px; margin-bottom: 0;">
+                    </div>
+                  </div>
+
+                  <div style="margin-bottom: 8px;">
+                    <label class="tg-form-label">Host / IP</label>
+                    <input type="text" class="tg-input-text" id="inputProxyHost" placeholder="127.0.0.1 or proxy.ip" style="padding: 8px; margin-bottom: 0;">
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                    <div>
+                      <label class="tg-form-label">Username</label>
+                      <input type="text" class="tg-input-text" id="inputProxyUser" placeholder="optional" style="padding: 8px; margin-bottom: 0;">
+                    </div>
+                    <div>
+                      <label class="tg-form-label">Password</label>
+                      <input type="password" class="tg-input-text" id="inputProxyPass" placeholder="optional" style="padding: 8px; margin-bottom: 0;">
+                    </div>
+                  </div>
+
+                  <button type="button" class="tg-btn-ghost" style="font-size: 12px; padding: 6px; margin-top: 4px;" onclick="testProxyPingAction()">
+                    <i class="fa-solid fa-bolt"></i> Test Proxy Ping
+                  </button>
+                </div>
+              </div>
+
+              <button class="tg-btn-blue" id="btnPhoneNext" onclick="submitPhoneForCode()">
+                Next <i class="fa-solid fa-arrow-right"></i>
+              </button>
+
+              <button class="tg-btn-ghost" onclick="showSessionImportStep()">
+                Or Sign in with StringSession
+              </button>
+            </div>
+
+            <!-- Step 2: Code Verification -->
+            <div id="stepCode" style="display: none;">
+              <label class="tg-form-label">Verification Code</label>
+              <input type="text" class="tg-input-text" id="inputCode" placeholder="12345" style="font-size: 22px; letter-spacing: 6px; text-align: center;">
+              <button class="tg-btn-blue" id="btnCodeVerify" onclick="submitVerificationCode()">
+                Confirm Code
+              </button>
+              <button class="tg-btn-ghost" onclick="resetAuthStep1()">
+                Change Phone Number
+              </button>
+            </div>
+
+            <!-- Step 3: 2FA Cloud Password -->
+            <div id="step2FA" style="display: none;">
+              <label class="tg-form-label">Cloud Password (2FA)</label>
+              <input type="password" class="tg-input-text" id="input2FAPass" placeholder="Enter Password">
+              <button class="tg-btn-blue" id="btn2FAVerify" onclick="submit2FAPassword()">
+                Submit Password
+              </button>
+            </div>
+
+            <!-- Step: Import StringSession directly -->
+            <div id="stepImport" style="display: none;">
+              <label class="tg-form-label">Paste StringSession</label>
+              <textarea class="tg-input-text" id="inputSessionString" rows="4" placeholder="1BJWap1wBuy5..."></textarea>
+              <button class="tg-btn-blue" onclick="submitDirectSessionImport()">
+                Import & Connect
+              </button>
+              <button class="tg-btn-ghost" onclick="resetAuthStep1()">
+                Back
+              </button>
+            </div>
+
+            <!-- Existing Accounts Switcher (If user already has accounts saved) -->
+            <div id="modalExistingAccountsBox" style="display: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--tg-border);">
+              <div style="font-size: 12px; font-weight: 600; color: var(--tg-text-secondary); margin-bottom: 8px;">
+                Switch to your saved accounts:
+              </div>
+              <div id="modalAccountsList" style="display: flex; flex-direction: column; gap: 6px;"></div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+      <!-- =========================================================
+           PROXY & ACCOUNTS SETTINGS MODAL
+           ========================================================= -->
+      <div class="tg-modal-backdrop" id="accountsModal">
+        <div class="tg-modal-box" style="max-width: 440px;">
+          <div style="padding: 16px 20px; border-bottom: 1px solid var(--tg-border); display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="font-size: 16.5px; font-weight: 700;">Proxy & Accounts</h3>
+            <button class="tg-app-bar-btn" onclick="closeAccountsModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <div style="padding: 18px 20px; max-height: 70vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <span style="font-size: 13px; font-weight: 600; color: var(--tg-text-secondary);">Logged-in Accounts</span>
+              <button class="tg-btn-ghost" style="width: auto; padding: 4px 10px; font-size: 12px; margin: 0;" onclick="closeAccountsModal(); openLoginModal();">
+                <i class="fa-solid fa-plus"></i> Add Account
+              </button>
+            </div>
+
+            <div id="accountsListContainer" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Dynamically populated -->
+            </div>
+
+            <div class="tg-proxy-card" style="margin-top: 18px;">
+              <h4 style="font-size: 13px; color: var(--tg-primary); margin-bottom: 6px;">
+                <i class="fa-solid fa-shield-halved"></i> Anti-Freeze Telegram Rule
+              </h4>
+              <p style="font-size: 12px; color: var(--tg-text-secondary); line-height: 1.5;">
+                Telegram freezes accounts when multiple requests come from datacenter IPs without a proxy. Using a dedicated SOCKS5 proxy per account isolates your network footprint.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================================
+           APK DOWNLOAD / INSTALL MODAL
+           ========================================================= -->
+      <div class="tg-modal-backdrop" id="apkModal">
+        <div class="tg-modal-box" style="max-width: 420px; text-align: center;">
+          <div style="padding: 16px 20px; border-bottom: 1px solid var(--tg-border); display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="font-size: 16.5px; font-weight: 700; color: #fff;">Download / Install on Phone</h3>
+            <button class="tg-app-bar-btn" onclick="closeApkDownloadModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <div style="padding: 24px 20px;">
+            <p style="font-size: 13.5px; color: var(--tg-text-secondary); margin-bottom: 16px;">
+              Scan this QR Code with your Android phone's Camera or Google Lens:
+            </p>
+
+            <div style="background: white; padding: 12px; border-radius: 12px; display: inline-block; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.4);">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://192.168.0.240:3000" alt="QR Code" style="display: block; width: 180px; height: 180px;">
+            </div>
+
+            <div style="background: var(--tg-bg-base); padding: 12px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; text-align: left; line-height: 1.5; border: 1px solid var(--tg-border);">
+              <div style="font-weight: 600; color: #fff; margin-bottom: 4px;">Direct Phone Steps:</div>
+              <ol style="padding-left: 18px; color: var(--tg-text-secondary);">
+                <li>Phone ke Chrome me kholein: <strong style="color: var(--tg-primary);">http://192.168.0.240:3000</strong></li>
+                <li>Upar 3 dots (⋮) par tap karein.</li>
+                <li><strong>"Install app"</strong> par tap karein.</li>
+                <li>Android OS turant iska native <strong>NexGram APK</strong> phone me install kar dega!</li>
+              </ol>
+            </div>
+
+            <a href="/nexgram.apk" download="nexgram.apk" class="tg-btn-blue" style="text-decoration: none; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <i class="fa-solid fa-download"></i> Download nexgram.apk (4 MB)
+            </a>
+
+            <button class="tg-btn-ghost" onclick="triggerAppInstall()" style="margin-top: 0;">
+              <i class="fa-solid fa-mobile-screen"></i> Install App in Phone Browser
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================================
+           LOGOUT CONFIRMATION MODAL (Telegram Android Dialog)
+           ========================================================= -->
+      <div class="tg-modal-backdrop" id="logoutModal" onclick="handleLogoutBackdropClick(event)">
+        <div class="tg-modal-box" style="max-width: 340px; padding: 22px 20px 18px;">
+          <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 10px;">Log Out?</div>
+          <div style="font-size: 14px; color: var(--tg-text-secondary); line-height: 1.5; margin-bottom: 22px;" id="logoutModalText">
+            Are you sure you want to log out from this account? You can add it back anytime.
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button class="tg-btn-ghost" style="padding: 9px 18px; font-weight: 600;" onclick="closeLogoutModal()">Cancel</button>
+            <button class="tg-btn-danger" style="padding: 9px 18px; font-weight: 600;" id="btnConfirmLogout" onclick="executeLogoutAction()">Log Out</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
