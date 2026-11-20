@@ -85,6 +85,9 @@ android {
 }
 
 dependencies {
+    // Official TDLib 1.8.70 Android Archive (arm64-v8a & armeabi-v7a)
+    implementation files('libs/tdlib-android.aar')
+
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.0'

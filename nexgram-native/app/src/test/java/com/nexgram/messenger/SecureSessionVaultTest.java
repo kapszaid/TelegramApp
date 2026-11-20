@@ -99,4 +99,35 @@ public class SecureSessionVaultTest {
     public void testNullPreferencesRejectedInConstructor() {
         new SecureSessionVault(null, false);
     }
+
+    @Test
+    public void testSaveAndRetrieveDatabaseEncryptionKey() {
+        byte[] key32 = new byte[32];
+        for (int i = 0; i < 32; i++) key32[i] = (byte) (i + 1);
+
+        vault.saveDatabaseKey("acc_tdlib_1", key32);
+        byte[] retrieved = vault.getDatabaseKey("acc_tdlib_1");
+
+        assertNotNull(retrieved);
+        assertEquals(32, retrieved.length);
+        org.junit.Assert.assertArrayEquals(key32, retrieved);
+    }
+
+    @Test
+    public void testGenerateRandom32ByteDatabaseKeyIdempotent() {
+        byte[] keyA = vault.getOrCreateDatabaseKey("acc_tdlib_2");
+        assertNotNull(keyA);
+        assertEquals(32, keyA.length);
+
+        // Subsequent call must retrieve the exact same stored key
+        byte[] keyB = vault.getOrCreateDatabaseKey("acc_tdlib_2");
+        assertNotNull(keyB);
+        org.junit.Assert.assertArrayEquals(keyA, keyB);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidDatabaseKeyLengthRejected() {
+        byte[] invalidKey = new byte[16]; // Must be strictly 32 bytes for TDLib AES-256
+        vault.saveDatabaseKey("acc_fail", invalidKey);
+    }
 }

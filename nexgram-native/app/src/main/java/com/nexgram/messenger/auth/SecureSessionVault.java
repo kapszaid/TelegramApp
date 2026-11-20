@@ -123,4 +123,56 @@ public class SecureSessionVault {
         if (accountId == null) return false;
         return encryptedPreferences.contains("auth_token_" + accountId);
     }
+
+    /**
+     * Securely saves an account-specific TDLib database encryption key.
+     * The key is stored in EncryptedSharedPreferences, protected by Android Keystore MasterKey.
+     */
+    public synchronized void saveDatabaseKey(String accountId, byte[] encryptionKey) {
+        if (accountId == null || accountId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Account ID cannot be null or empty");
+        }
+        if (encryptionKey == null || encryptionKey.length != 32) {
+            throw new IllegalArgumentException("TDLib database encryption key must be exactly 32 bytes");
+        }
+        String base64Key = java.util.Base64.getEncoder().encodeToString(encryptionKey);
+        encryptedPreferences.edit().putString("tdlib_db_key_" + accountId, base64Key).apply();
+    }
+
+    /**
+     * Retrieves the wrapped TDLib database encryption key for an account.
+     */
+    public synchronized byte[] getDatabaseKey(String accountId) {
+        if (accountId == null) return null;
+        String base64Key = encryptedPreferences.getString("tdlib_db_key_" + accountId, null);
+        if (base64Key == null) return null;
+        try {
+            byte[] key = java.util.Base64.getDecoder().decode(base64Key);
+            return (key != null && key.length == 32) ? key : null;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Retrieves or generates a fresh cryptographically secure random 32-byte key for an account.
+     */
+    public synchronized byte[] getOrCreateDatabaseKey(String accountId) {
+        if (accountId == null || accountId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Account ID cannot be null or empty");
+        }
+        byte[] existingKey = getDatabaseKey(accountId);
+        if (existingKey != null && existingKey.length == 32) {
+            return existingKey;
+        }
+        byte[] freshKey = new byte[32];
+        new java.security.SecureRandom().nextBytes(freshKey);
+        saveDatabaseKey(accountId, freshKey);
+        return freshKey;
+    }
+
+    public synchronized void removeDatabaseKey(String accountId) {
+        if (accountId == null) return;
+        encryptedPreferences.edit().remove("tdlib_db_key_" + accountId).apply();
+    }
 }

@@ -41,12 +41,21 @@ public class NexGramApplication extends Application {
         // 3. Initialize proxy controller with secure credential support
         proxyController = new ProxyController(this, sessionVault);
 
+        // 4. Initialize native TDLib multi-account manager layer if vault is available
+        if (vaultAvailable) {
+            com.nexgram.messenger.tdlib.TdLibManager.init(this, sessionVault);
+        }
+
         Log.i(TAG, "NexGram Native Client initialized. Vault Available: " + vaultAvailable +
                    ", Active accounts: " + accountManager.getAccountCount());
     }
 
     public static NexGramApplication getInstance() {
         return instance;
+    }
+
+    public com.nexgram.messenger.tdlib.TdLibManager getTdLibManager() {
+        return vaultAvailable ? com.nexgram.messenger.tdlib.TdLibManager.getInstance() : null;
     }
 
     public boolean isVaultAvailable() {

@@ -36,6 +36,7 @@ node_modules/
 *.apk
 *.aab
 *.ap_
+*.zip
 public/nexgram.apk
 public/*.apk
 
