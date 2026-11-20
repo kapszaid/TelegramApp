@@ -1,138 +1,188 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark">
 
-    <com.google.android.material.appbar.AppBarLayout
+    <!-- Primary Application Content -->
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/bg_dark_secondary">
+        android:layout_height="match_parent">
 
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            app:title="@string/app_name"
-            app:titleTextColor="@color/text_primary" />
-
-        <!-- Independent Client Disclaimer Banner -->
-        <TextView
-            android:id="@+id/tvDisclaimer"
+        <com.google.android.material.appbar.AppBarLayout
+            android:id="@+id/appBarLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1B2836"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="4dp"
-            android:text="@string/app_disclaimer"
-            android:textColor="@color/text_secondary"
-            android:textSize="11sp" />
+            android:background="@color/bg_dark_secondary">
 
-        <!-- Account Switcher Strip -->
-        <LinearLayout
-            android:id="@+id/layoutAccountStrip"
+            <!-- Official Telegram-style Main Toolbar -->
+            <androidx.appcompat.widget.Toolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="?attr/actionBarSize"
+                app:navigationIcon="@drawable/ic_menu_hamburger"
+                app:title="@string/app_name"
+                app:titleTextColor="@color/text_primary">
+
+                <!-- Interactive Search Bar View (Shown when searching) -->
+                <LinearLayout
+                    android:id="@+id/layoutSearchBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:visibility="gone">
+
+                    <EditText
+                        android:id="@+id/etSearchQuery"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="40dp"
+                        android:background="@null"
+                        android:hint="Search chats..."
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_muted"
+                        android:textSize="16sp"
+                        android:imeOptions="actionSearch"
+                        android:inputType="text" />
+
+                    <ImageView
+                        android:id="@+id/btnCloseSearch"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:padding="8dp"
+                        android:src="@android:drawable/ic_menu_close_clear_cancel"
+                        android:contentDescription="Close search"
+                        app:tint="@color/text_secondary" />
+                </LinearLayout>
+
+            </androidx.appcompat.widget.Toolbar>
+
+            <!-- Telegram Chat Folder Tabs -->
+            <com.google.android.material.tabs.TabLayout
+                android:id="@+id/tabLayoutFolders"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:background="@color/bg_dark_secondary"
+                app:tabMode="scrollable"
+                app:tabGravity="fill"
+                app:tabIndicatorColor="@color/primary"
+                app:tabIndicatorHeight="3dp"
+                app:tabTextColor="@color/text_secondary"
+                app:tabSelectedTextColor="@color/primary"
+                app:tabTextAppearance="@style/TextAppearance.MaterialComponents.Caption" />
+
+        </com.google.android.material.appbar.AppBarLayout>
+
+        <!-- Main Body: Chat List & Status Views -->
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="8dp"
-            android:gravity="center_vertical"
-            android:background="@color/bg_dark_card">
+            android:layout_height="match_parent"
+            app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-            <TextView
-                android:id="@+id/tvActiveAccountName"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:text="No Account Connected"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
+            <!-- Swipe to Refresh Container -->
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/swipeRefreshLayout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
 
-            <Button
-                android:id="@+id/btnSwitchAccount"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:text="@string/btn_switch_account"
-                android:textSize="12sp"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:textColor="@color/primary"
+                <!-- Native Telegram Chat RecyclerView -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recyclerViewChats"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:paddingBottom="80dp" />
+
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+            <!-- Loading Progress Indicator -->
+            <ProgressBar
+                android:id="@+id/progressBarChats"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/primary"
                 android:visibility="gone" />
-        </LinearLayout>
 
-    </com.google.android.material.appbar.AppBarLayout>
+            <!-- Clean Empty State (Zero Fake Chats) -->
+            <LinearLayout
+                android:id="@+id/layoutEmptyState"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="32dp"
+                android:visibility="gone">
 
-    <FrameLayout
-        android:layout_width="match_parent"
+                <ImageView
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:src="@android:drawable/ic_dialog_info"
+                    app:tint="@color/text_muted"
+                    android:layout_marginBottom="16dp"
+                    android:contentDescription="Empty state icon" />
+
+                <TextView
+                    android:id="@+id/tvEmptyTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/empty_state_title"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tvEmptySubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/empty_state_desc"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:gravity="center" />
+
+                <Button
+                    android:id="@+id/btnEmptyStateLogin"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_login_telegram"
+                    android:textColor="@color/text_primary"
+                    android:backgroundTint="@color/primary"
+                    android:layout_marginTop="20dp"
+                    style="@style/Widget.MaterialComponents.Button" />
+            </LinearLayout>
+
+        </FrameLayout>
+
+        <!-- Floating Compose Button (Pencil Icon) -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabNewChat"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:src="@drawable/ic_pencil_compose"
+            app:backgroundTint="@color/primary"
+            app:tint="#FFFFFF"
+            android:contentDescription="New Chat"
+            android:visibility="visible" />
+
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+    <!-- Telegram-Style Navigation Drawer -->
+    <com.google.android.material.navigation.NavigationView
+        android:id="@+id/navigationView"
+        android:layout_width="300dp"
         android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        android:layout_gravity="start"
+        android:background="@color/bg_dark_secondary"
+        app:headerLayout="@layout/nav_header_main"
+        app:menu="@menu/drawer_menu"
+        app:itemIconTint="@color/text_secondary"
+        app:itemTextColor="@color/text_primary" />
 
-        <!-- Chat List View -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recyclerViewChats"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:visibility="gone" />
-
-        <!-- Clean Empty State (Zero Fake Chats) -->
-        <LinearLayout
-            android:id="@+id/layoutEmptyState"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="32dp"
-            android:visibility="visible">
-
-            <ImageView
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:src="@android:drawable/ic_dialog_info"
-                app:tint="@color/text_muted"
-                android:layout_marginBottom="16dp"
-                android:contentDescription="Empty state icon" />
-
-            <TextView
-                android:id="@+id/tvEmptyTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/empty_state_title"
-                android:textColor="@color/text_primary"
-                android:textStyle="bold"
-                android:textSize="18sp"
-                android:layout_marginBottom="8dp" />
-
-            <TextView
-                android:id="@+id/tvEmptySubtitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/empty_state_desc"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                android:gravity="center" />
-
-            <Button
-                android:id="@+id/btnEmptyStateLogin"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/btn_login_telegram"
-                android:textColor="@color/text_primary"
-                android:backgroundTint="@color/primary"
-                android:layout_marginTop="20dp"
-                style="@style/Widget.MaterialComponents.Button" />
-        </LinearLayout>
-
-    </FrameLayout>
-
-    <!-- Floating Action Button for New Chat -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabNewChat"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
-        app:backgroundTint="@color/primary"
-        app:tint="@color/text_primary"
-        android:contentDescription="New Chat"
-        android:visibility="gone" />
-
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+</androidx.drawerlayout.widget.DrawerLayout>

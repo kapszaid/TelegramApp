@@ -2,261 +2,603 @@ package com.nexgram.messenger.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.LayoutInflater;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.navigation.NavigationView;
+import com.google.android.material.tabs.TabLayout;
 import com.nexgram.messenger.NexGramApplication;
 import com.nexgram.messenger.R;
 import com.nexgram.messenger.auth.AccountManager;
+import com.nexgram.messenger.tdlib.TdLibAccountClient;
 import com.nexgram.messenger.tdlib.TdLibManager;
+import com.nexgram.messenger.ui.adapter.ChatAdapter;
+import com.nexgram.messenger.ui.helpers.TelegramAvatarHelper;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
+import org.drinkless.tdlib.TdApi;
 
 /**
- * Primary Native Activity for NexGram
- * Displays chat list, multi-account switcher, and navigation controls.
+ * Primary Native Telegram Chat Screen for NexGram
  *
- * ZERO FAKE CHATS POLICY:
- * Does not show fake Telegram mock chats or fake notifications.
- * Renders an accurate empty state when no accounts or dialogs exist.
+ * Implements official Telegram Android main chat screen:
+ * - Hamburger navigation drawer with profile header, account details, and settings shortcuts
+ * - Search bar with real-time in-memory & TDLib search
+ * - Telegram Chat Folder Tabs: All, Personal, Groups, Channels, Unread
+ * - Real TDLib chat list synchronization (LoadChats, UpdateNewChat, UpdateChatPosition, etc.)
+ * - Native avatar generation with official 7-color Telegram palette and photo caching
+ * - Pinned pushpin indicator, mute state, outgoing checkmark delivery, and unread counters
+ * - Floating compose button (pencil icon)
+ * - Zero fake mock data: displays only authentic Telegram chats
  */
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+    private static final String TAG = "MainActivity";
 
-    public static class ChatSummary {
-        public long id;
-        public String title;
-        public String lastMessage;
-        public String time;
-        public int unreadCount;
-
-        public ChatSummary(long id, String title, String lastMessage, String time, int unreadCount) {
-            this.id = id;
-            this.title = title;
-            this.lastMessage = lastMessage;
-            this.time = time;
-            this.unreadCount = unreadCount;
-        }
-    }
-
-    private TextView tvActiveAccountName;
-    private Button btnSwitchAccount;
+    private DrawerLayout drawerLayout;
+    private Toolbar toolbar;
+    private LinearLayout layoutSearchBar;
+    private EditText etSearchQuery;
+    private ImageView btnCloseSearch;
+    private TabLayout tabLayoutFolders;
+    private SwipeRefreshLayout swipeRefreshLayout;
     private RecyclerView recyclerViewChats;
+    private ProgressBar progressBarChats;
     private View layoutEmptyState;
     private TextView tvEmptyTitle, tvEmptySubtitle;
     private Button btnEmptyStateLogin;
+    private FloatingActionButton fabNewChat;
+    private NavigationView navigationView;
+
+    // Navigation Header Views
+    private ImageView ivNavAvatarCircle;
+    private TextView tvNavAvatarInitials;
+    private ImageView ivNavAvatarPhoto;
+    private TextView tvNavUserName;
+    private TextView tvNavUserPhone;
+
+    // Chat data & state
+    private final ConcurrentHashMap<Long, TdApi.Chat> allChatsMap = new ConcurrentHashMap<>();
+    private final List<TdApi.Chat> displayChats = new ArrayList<>();
     private ChatAdapter chatAdapter;
-    private final List<ChatSummary> chatList = new ArrayList<>();
+    private TdLibAccountClient activeClient;
+    private int currentFolderIndex = 0; // 0=All, 1=Personal, 2=Groups, 3=Channels, 4=Unread
+    private String currentSearchQuery = "";
+    private boolean isSearching = false;
+
+    private final TdLibAccountClient.RawUpdateListener rawUpdateListener = this::handleIncomingTdlibUpdate;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Toolbar toolbar = findViewById(R.id.toolbar);
+        initViews();
+        setupNavigationDrawer();
+        setupFolderTabs();
+        setupSearch();
+        setupRecyclerView();
+    }
+
+    private void initViews() {
+        drawerLayout = findViewById(R.id.drawerLayout);
+        toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        tvActiveAccountName = findViewById(R.id.tvActiveAccountName);
-        btnSwitchAccount = findViewById(R.id.btnSwitchAccount);
+        layoutSearchBar = findViewById(R.id.layoutSearchBar);
+        etSearchQuery = findViewById(R.id.etSearchQuery);
+        btnCloseSearch = findViewById(R.id.btnCloseSearch);
+        tabLayoutFolders = findViewById(R.id.tabLayoutFolders);
+        swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout);
         recyclerViewChats = findViewById(R.id.recyclerViewChats);
+        progressBarChats = findViewById(R.id.progressBarChats);
         layoutEmptyState = findViewById(R.id.layoutEmptyState);
         tvEmptyTitle = findViewById(R.id.tvEmptyTitle);
         tvEmptySubtitle = findViewById(R.id.tvEmptySubtitle);
         btnEmptyStateLogin = findViewById(R.id.btnEmptyStateLogin);
+        fabNewChat = findViewById(R.id.fabNewChat);
+        navigationView = findViewById(R.id.navigationView);
 
+        btnEmptyStateLogin.setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, AuthActivity.class));
+        });
+
+        fabNewChat.setOnClickListener(v -> {
+            Toast.makeText(this, "Compose new message (Contacts integration)", Toast.LENGTH_SHORT).show();
+        });
+
+        swipeRefreshLayout.setColorSchemeColors(getColor(R.color.primary));
+        swipeRefreshLayout.setOnRefreshListener(() -> {
+            if (activeClient != null) {
+                activeClient.loadChats(new TdApi.ChatListMain(), 30, result -> {
+                    runOnUiThread(() -> swipeRefreshLayout.setRefreshing(false));
+                });
+            } else {
+                swipeRefreshLayout.setRefreshing(false);
+            }
+        });
+    }
+
+    private void setupNavigationDrawer() {
+        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
+                this, drawerLayout, toolbar, R.string.title_settings, R.string.title_settings);
+        drawerLayout.addDrawerListener(toggle);
+        toggle.syncState();
+
+        toolbar.setNavigationIcon(R.drawable.ic_menu_hamburger);
+        toolbar.setNavigationOnClickListener(v -> {
+            if (isSearching) {
+                closeSearchMode();
+            } else {
+                drawerLayout.openDrawer(GravityCompat.START);
+            }
+        });
+
+        navigationView.setNavigationItemSelectedListener(this);
+
+        View headerView = navigationView.getHeaderView(0);
+        if (headerView != null) {
+            ivNavAvatarCircle = headerView.findViewById(R.id.ivNavAvatarCircle);
+            tvNavAvatarInitials = headerView.findViewById(R.id.tvNavAvatarInitials);
+            ivNavAvatarPhoto = headerView.findViewById(R.id.ivNavAvatarPhoto);
+            tvNavUserName = headerView.findViewById(R.id.tvNavUserName);
+            tvNavUserPhone = headerView.findViewById(R.id.tvNavUserPhone);
+        }
+    }
+
+    private void setupFolderTabs() {
+        tabLayoutFolders.addTab(tabLayoutFolders.newTab().setText("All"));
+        tabLayoutFolders.addTab(tabLayoutFolders.newTab().setText("Personal"));
+        tabLayoutFolders.addTab(tabLayoutFolders.newTab().setText("Groups"));
+        tabLayoutFolders.addTab(tabLayoutFolders.newTab().setText("Channels"));
+        tabLayoutFolders.addTab(tabLayoutFolders.newTab().setText("Unread"));
+
+        tabLayoutFolders.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                currentFolderIndex = tab.getPosition();
+                applyFilterAndSort();
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {}
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {}
+        });
+    }
+
+    private void setupSearch() {
+        btnCloseSearch.setOnClickListener(v -> closeSearchMode());
+
+        etSearchQuery.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                currentSearchQuery = s != null ? s.toString().trim() : "";
+                applyFilterAndSort();
+
+                if (!currentSearchQuery.isEmpty() && activeClient != null) {
+                    activeClient.searchChats(currentSearchQuery, 20, result -> {
+                        if (result instanceof TdApi.Chats) {
+                            long[] ids = ((TdApi.Chats) result).chatIds;
+                            for (long id : ids) {
+                                if (!allChatsMap.containsKey(id)) {
+                                    activeClient.getChat(id, null);
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+    }
+
+    private void setupRecyclerView() {
         recyclerViewChats.setLayoutManager(new LinearLayoutManager(this));
-        chatAdapter = new ChatAdapter(chatList, chat -> {
+        chatAdapter = new ChatAdapter(this, displayChats, activeClient, chat -> {
             Intent intent = new Intent(MainActivity.this, ChatActivity.class);
             intent.putExtra("chat_id", chat.id);
-            intent.putExtra("chat_title", chat.title);
+            intent.putExtra("chat_title", chat.title != null ? chat.title : "Chat");
             startActivity(intent);
         });
         recyclerViewChats.setAdapter(chatAdapter);
-
-        btnSwitchAccount.setOnClickListener(v -> showAccountSwitcherDialog());
-        if (btnEmptyStateLogin != null) {
-            btnEmptyStateLogin.setOnClickListener(v -> {
-                Intent intent = new Intent(MainActivity.this, AuthActivity.class);
-                startActivity(intent);
-            });
-        }
-
-        loadAccountAndData();
-        triggerTdLibSmokeTest();
-    }
-
-    private void triggerTdLibSmokeTest() {
-        NexGramApplication app = NexGramApplication.getInstance();
-        if (app != null && app.isVaultAvailable() && app.getTdLibManager() != null) {
-            app.getTdLibManager().runRuntimeSmokeTest((success, state, message) -> {
-                android.util.Log.i("MainActivity", "[TDLibSmokeTest] Result: success=" + success + ", state=" + state + ", msg=" + message);
-            });
-        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        loadAccountAndData();
+        syncActiveAccountAndChats();
     }
 
-    private void loadAccountAndData() {
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (activeClient != null) {
+            activeClient.removeRawUpdateListener(rawUpdateListener);
+        }
+    }
+
+    private void syncActiveAccountAndChats() {
         AccountManager manager = NexGramApplication.getInstance().getAccountManager();
         AccountManager.AccountItem active = manager != null ? manager.getActiveAccount() : null;
 
-        if (active != null) {
-            tvActiveAccountName.setText(active.name + " (" + active.phone + ")");
-            btnSwitchAccount.setVisibility(manager.getAccountCount() > 1 ? View.VISIBLE : View.GONE);
-            if (tvEmptyTitle != null) tvEmptyTitle.setText(R.string.empty_state_logged_in_title);
-            if (tvEmptySubtitle != null) tvEmptySubtitle.setText(R.string.empty_state_logged_in_desc);
-            if (btnEmptyStateLogin != null) btnEmptyStateLogin.setVisibility(View.GONE);
-
-            // Reopen and monitor existing TDLib client for session validity
-            TdLibManager tdManager = NexGramApplication.getInstance().getTdLibManager();
-            if (tdManager != null) {
-                com.nexgram.messenger.tdlib.TdLibAccountClient client = tdManager.getOrCreateClient(active.id);
-                client.addStateListener(new com.nexgram.messenger.tdlib.TdLibAccountClient.StateListener() {
-                    @Override
-                    public void onAuthorizationStateChanged(org.drinkless.tdlib.TdApi.AuthorizationState newState) {
-                        if (newState instanceof org.drinkless.tdlib.TdApi.AuthorizationStateWaitPhoneNumber) {
-                            runOnUiThread(() -> {
-                                android.util.Log.w("MainActivity", "Session expired or revoked for account: " + active.id);
-                                Toast.makeText(MainActivity.this, "Session expired or revoked. Please log in again.", Toast.LENGTH_LONG).show();
-                                manager.removeAccount(active.id);
-                                loadAccountAndData();
-                            });
-                        }
-                    }
-
-                    @Override
-                    public void onClientError(int errorCode, String errorMessage) {}
-                });
-            }
-        } else {
-            tvActiveAccountName.setText("No Account Connected");
-            btnSwitchAccount.setVisibility(View.GONE);
-            if (tvEmptyTitle != null) tvEmptyTitle.setText(R.string.empty_state_title);
-            if (tvEmptySubtitle != null) tvEmptySubtitle.setText(R.string.empty_state_desc);
-            if (btnEmptyStateLogin != null) btnEmptyStateLogin.setVisibility(View.VISIBLE);
+        if (active == null) {
+            // Logged out / no account state
+            updateDrawerProfile(null);
+            showLoggedOutEmptyState();
+            allChatsMap.clear();
+            displayChats.clear();
+            chatAdapter.notifyDataSetChanged();
+            return;
         }
 
-        // STRICT ACCURACY: No fake chats inserted!
-        // Dialog list stays empty until live MTProto dialog synchronization is connected.
-        chatList.clear();
+        updateDrawerProfile(active);
+
+        TdLibManager tdManager = NexGramApplication.getInstance().getTdLibManager();
+        if (tdManager == null) return;
+
+        // Retrieve existing or initialize dedicated TDLib client
+        TdLibAccountClient client = tdManager.getOrCreateClient(active.id);
+        if (this.activeClient != client) {
+            if (this.activeClient != null) {
+                this.activeClient.removeRawUpdateListener(rawUpdateListener);
+            }
+            this.activeClient = client;
+            this.activeClient.addRawUpdateListener(rawUpdateListener);
+        }
+
+        // Setup ChatAdapter with current client for avatar loading
+        setupRecyclerView();
+
+        // Listen for authorization state / session revocation
+        this.activeClient.addStateListener(new TdLibAccountClient.StateListener() {
+            @Override
+            public void onAuthorizationStateChanged(TdApi.AuthorizationState newState) {
+                if (newState instanceof TdApi.AuthorizationStateWaitPhoneNumber) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(MainActivity.this, "Telegram session expired or revoked. Please log in again.", Toast.LENGTH_LONG).show();
+                        manager.removeAccount(active.id);
+                        syncActiveAccountAndChats();
+                    });
+                } else if (newState instanceof TdApi.AuthorizationStateReady) {
+                    runOnUiThread(() -> loadChatsFromTdLib());
+                }
+            }
+
+            @Override
+            public void onClientError(int errorCode, String errorMessage) {
+                Log.w(TAG, "Client error [" + errorCode + "]: " + errorMessage);
+            }
+        });
+
+        // Trigger chat loading if engine is ready
+        TdApi.AuthorizationState state = this.activeClient.getCurrentAuthState();
+        if (state instanceof TdApi.AuthorizationStateReady) {
+            loadChatsFromTdLib();
+        } else {
+            progressBarChats.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void loadChatsFromTdLib() {
+        if (activeClient == null) return;
+
+        if (allChatsMap.isEmpty()) {
+            progressBarChats.setVisibility(View.VISIBLE);
+        }
+
+        // Request loading first 30 chats into TDLib memory
+        activeClient.loadChats(new TdApi.ChatListMain(), 30, result -> {
+            runOnUiThread(() -> {
+                progressBarChats.setVisibility(View.GONE);
+                applyFilterAndSort();
+            });
+        });
+    }
+
+    private void handleIncomingTdlibUpdate(TdApi.Object update) {
+        if (update instanceof TdApi.UpdateNewChat) {
+            TdApi.Chat chat = ((TdApi.UpdateNewChat) update).chat;
+            allChatsMap.put(chat.id, chat);
+            postApplyFilter();
+        } else if (update instanceof TdApi.UpdateChatPosition) {
+            TdApi.UpdateChatPosition p = (TdApi.UpdateChatPosition) update;
+            TdApi.Chat chat = allChatsMap.get(p.chatId);
+            if (chat != null) {
+                updateChatPosition(chat, p.position);
+                postApplyFilter();
+            }
+        } else if (update instanceof TdApi.UpdateChatLastMessage) {
+            TdApi.UpdateChatLastMessage m = (TdApi.UpdateChatLastMessage) update;
+            TdApi.Chat chat = allChatsMap.get(m.chatId);
+            if (chat != null) {
+                chat.lastMessage = m.lastMessage;
+                if (m.positions != null) {
+                    chat.positions = m.positions;
+                }
+                postApplyFilter();
+            }
+        } else if (update instanceof TdApi.UpdateChatReadInbox) {
+            TdApi.UpdateChatReadInbox r = (TdApi.UpdateChatReadInbox) update;
+            TdApi.Chat chat = allChatsMap.get(r.chatId);
+            if (chat != null) {
+                chat.lastReadInboxMessageId = r.lastReadInboxMessageId;
+                chat.unreadCount = r.unreadCount;
+                postApplyFilter();
+            }
+        } else if (update instanceof TdApi.UpdateChatReadOutbox) {
+            TdApi.UpdateChatReadOutbox r = (TdApi.UpdateChatReadOutbox) update;
+            TdApi.Chat chat = allChatsMap.get(r.chatId);
+            if (chat != null) {
+                chat.lastReadOutboxMessageId = r.lastReadOutboxMessageId;
+                postApplyFilter();
+            }
+        } else if (update instanceof TdApi.UpdateChatNotificationSettings) {
+            TdApi.UpdateChatNotificationSettings n = (TdApi.UpdateChatNotificationSettings) update;
+            TdApi.Chat chat = allChatsMap.get(n.chatId);
+            if (chat != null) {
+                chat.notificationSettings = n.notificationSettings;
+                postApplyFilter();
+            }
+        } else if (update instanceof TdApi.UpdateChatTitle) {
+            TdApi.UpdateChatTitle t = (TdApi.UpdateChatTitle) update;
+            TdApi.Chat chat = allChatsMap.get(t.chatId);
+            if (chat != null) {
+                chat.title = t.title;
+                postApplyFilter();
+            }
+        } else if (update instanceof TdApi.UpdateChatPhoto) {
+            TdApi.UpdateChatPhoto p = (TdApi.UpdateChatPhoto) update;
+            TdApi.Chat chat = allChatsMap.get(p.chatId);
+            if (chat != null) {
+                chat.photo = p.photo;
+                postApplyFilter();
+            }
+        } else if (update instanceof TdApi.UpdateFile) {
+            postApplyFilter();
+        } else if (update instanceof TdApi.UpdateUser) {
+            // Update profile info if self
+            TdApi.User user = ((TdApi.UpdateUser) update).user;
+            AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+            AccountManager.AccountItem active = manager != null ? manager.getActiveAccount() : null;
+            if (active != null && user.id == Long.parseLong(active.id.replace("account_", ""))) {
+                runOnUiThread(() -> updateDrawerProfile(active));
+            }
+        }
+    }
+
+    private void updateChatPosition(TdApi.Chat chat, TdApi.ChatPosition newPos) {
+        if (chat.positions == null) {
+            chat.positions = new TdApi.ChatPosition[]{newPos};
+            return;
+        }
+        boolean replaced = false;
+        List<TdApi.ChatPosition> list = new ArrayList<>();
+        for (TdApi.ChatPosition pos : chat.positions) {
+            if (isSameChatList(pos.list, newPos.list)) {
+                if (newPos.order > 0) {
+                    list.add(newPos);
+                }
+                replaced = true;
+            } else {
+                list.add(pos);
+            }
+        }
+        if (!replaced && newPos.order > 0) {
+            list.add(newPos);
+        }
+        chat.positions = list.toArray(new TdApi.ChatPosition[0]);
+    }
+
+    private boolean isSameChatList(TdApi.ChatList a, TdApi.ChatList b) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return a.getClass().equals(b.getClass());
+    }
+
+    private void postApplyFilter() {
+        runOnUiThread(this::applyFilterAndSort);
+    }
+
+    private synchronized void applyFilterAndSort() {
+        List<TdApi.Chat> filtered = new ArrayList<>();
+        String queryLower = currentSearchQuery.toLowerCase(Locale.getDefault());
+
+        for (TdApi.Chat chat : allChatsMap.values()) {
+            long order = getChatOrder(chat);
+            // Ignore chats not in Main chat list unless searching
+            if (order <= 0 && currentSearchQuery.isEmpty()) {
+                continue;
+            }
+
+            // 1. Folder Tab Filtering
+            if (!matchesFolder(chat, currentFolderIndex)) {
+                continue;
+            }
+
+            // 2. Search Query Filtering
+            if (!currentSearchQuery.isEmpty()) {
+                String title = chat.title != null ? chat.title.toLowerCase(Locale.getDefault()) : "";
+                if (!title.contains(queryLower)) {
+                    continue;
+                }
+            }
+
+            filtered.add(chat);
+        }
+
+        // 3. Sort by TDLib Chat Position order descending (pinned chats automatically at top)
+        Collections.sort(filtered, (c1, c2) -> Long.compare(getChatOrder(c2), getChatOrder(c1)));
+
+        displayChats.clear();
+        displayChats.addAll(filtered);
         chatAdapter.notifyDataSetChanged();
 
-        if (chatList.isEmpty()) {
+        progressBarChats.setVisibility(View.GONE);
+
+        if (displayChats.isEmpty()) {
             recyclerViewChats.setVisibility(View.GONE);
             layoutEmptyState.setVisibility(View.VISIBLE);
+            tvEmptyTitle.setText(isSearching ? "No Results Found" : "No Chats");
+            tvEmptySubtitle.setText(isSearching ? "No chats matched \"" + currentSearchQuery + "\"." : "No conversations found in this folder.");
+            btnEmptyStateLogin.setVisibility(View.GONE);
         } else {
             recyclerViewChats.setVisibility(View.VISIBLE);
             layoutEmptyState.setVisibility(View.GONE);
         }
     }
 
-    private void showAccountSwitcherDialog() {
-        AccountManager manager = NexGramApplication.getInstance().getAccountManager();
-        if (manager == null) return;
-        List<AccountManager.AccountItem> accounts = manager.getAllAccounts();
-
-        if (accounts.isEmpty()) {
-            Toast.makeText(this, "No other accounts authorized. Add an account in Settings.", Toast.LENGTH_SHORT).show();
-            return;
+    private boolean matchesFolder(TdApi.Chat chat, int folderIndex) {
+        switch (folderIndex) {
+            case 0: // All
+                return true;
+            case 1: // Personal (Private & Secret)
+                return chat.type instanceof TdApi.ChatTypePrivate || chat.type instanceof TdApi.ChatTypeSecret;
+            case 2: // Groups (Basic Groups & non-channel Supergroups)
+                return chat.type instanceof TdApi.ChatTypeBasicGroup ||
+                       (chat.type instanceof TdApi.ChatTypeSupergroup && !((TdApi.ChatTypeSupergroup) chat.type).isChannel);
+            case 3: // Channels (Supergroups where isChannel is true)
+                return chat.type instanceof TdApi.ChatTypeSupergroup && ((TdApi.ChatTypeSupergroup) chat.type).isChannel;
+            case 4: // Unread
+                return chat.unreadCount > 0 || chat.isMarkedAsUnread;
+            default:
+                return true;
         }
+    }
 
-        String[] names = new String[accounts.size()];
-        for (int i = 0; i < accounts.size(); i++) {
-            names[i] = accounts.get(i).name + " (" + accounts.get(i).phone + ")";
+    public static long getChatOrder(TdApi.Chat chat) {
+        if (chat == null || chat.positions == null) return 0;
+        for (TdApi.ChatPosition pos : chat.positions) {
+            if (pos.list instanceof TdApi.ChatListMain) {
+                return pos.order;
+            }
         }
+        return 0;
+    }
 
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.title_accounts)
-                .setItems(names, (dialog, which) -> {
-                    manager.switchAccount(accounts.get(which).id);
-                    loadAccountAndData();
-                    Toast.makeText(this, "Switched to " + accounts.get(which).name, Toast.LENGTH_SHORT).show();
-                })
-                .setPositiveButton("Cancel", null)
-                .show();
+    private void updateDrawerProfile(AccountManager.AccountItem active) {
+        if (active != null) {
+            tvNavUserName.setText(active.name);
+            tvNavUserPhone.setText(active.phone);
+            ivNavAvatarCircle.setColorFilter(TelegramAvatarHelper.getAvatarColor(Math.abs(active.name.hashCode())));
+            tvNavAvatarInitials.setText(TelegramAvatarHelper.getInitials(active.name));
+            tvNavAvatarInitials.setVisibility(View.VISIBLE);
+            ivNavAvatarPhoto.setVisibility(View.GONE);
+        } else {
+            tvNavUserName.setText("NexGram");
+            tvNavUserPhone.setText("Tap to log in");
+            ivNavAvatarCircle.setColorFilter(getColor(R.color.primary));
+            tvNavAvatarInitials.setText("NG");
+            tvNavAvatarInitials.setVisibility(View.VISIBLE);
+            ivNavAvatarPhoto.setVisibility(View.GONE);
+        }
+    }
+
+    private void showLoggedOutEmptyState() {
+        recyclerViewChats.setVisibility(View.GONE);
+        progressBarChats.setVisibility(View.GONE);
+        layoutEmptyState.setVisibility(View.VISIBLE);
+        tvEmptyTitle.setText(R.string.empty_state_title);
+        tvEmptySubtitle.setText(R.string.empty_state_desc);
+        btnEmptyStateLogin.setVisibility(View.VISIBLE);
+        fabNewChat.setVisibility(View.GONE);
+    }
+
+    private void openSearchMode() {
+        isSearching = true;
+        layoutSearchBar.setVisibility(View.VISIBLE);
+        toolbar.setTitle("");
+        toolbar.setNavigationIcon(android.R.drawable.ic_menu_revert);
+        etSearchQuery.requestFocus();
+    }
+
+    private void closeSearchMode() {
+        isSearching = false;
+        currentSearchQuery = "";
+        etSearchQuery.setText("");
+        layoutSearchBar.setVisibility(View.GONE);
+        toolbar.setTitle(R.string.app_name);
+        toolbar.setNavigationIcon(R.drawable.ic_menu_hamburger);
+        applyFilterAndSort();
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, 1, 0, R.string.title_settings)
-            .setIcon(android.R.drawable.ic_menu_preferences)
-            .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        menu.add(0, 101, 0, "Search")
+                .setIcon(R.drawable.ic_search)
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
         return true;
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == 1) {
-            startActivity(new Intent(this, SettingsActivity.class));
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == 101) {
+            openSearchMode();
             return true;
         }
         return super.onOptionsItemSelected(item);
     }
 
-    private static class ChatAdapter extends RecyclerView.Adapter<ChatViewHolder> {
-        interface OnChatClickListener {
-            void onChatClick(ChatSummary chat);
+    @Override
+    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+        int id = item.getItemId();
+        drawerLayout.closeDrawer(GravityCompat.START);
+
+        if (id == R.id.nav_settings) {
+            startActivity(new Intent(this, SettingsActivity.class));
+        } else if (id == R.id.nav_saved) {
+            Intent intent = new Intent(this, ChatActivity.class);
+            intent.putExtra("chat_title", "Saved Messages");
+            startActivity(intent);
+        } else if (id == R.id.nav_new_group) {
+            Toast.makeText(this, "New Group (Contacts integration)", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.nav_contacts) {
+            Toast.makeText(this, "Telegram Contacts", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.nav_calls) {
+            Toast.makeText(this, "Calls history", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.nav_night_mode) {
+            Toast.makeText(this, "Night mode active", Toast.LENGTH_SHORT).show();
         }
 
-        private final List<ChatSummary> items;
-        private final OnChatClickListener listener;
-
-        public ChatAdapter(List<ChatSummary> items, OnChatClickListener listener) {
-            this.items = items;
-            this.listener = listener;
-        }
-
-        @NonNull
-        @Override
-        public ChatViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_chat, parent, false);
-            return new ChatViewHolder(view);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull ChatViewHolder holder, int position) {
-            ChatSummary chat = items.get(position);
-            holder.tvTitle.setText(chat.title);
-            holder.tvMessage.setText(chat.lastMessage);
-            holder.tvTime.setText(chat.time);
-            if (chat.unreadCount > 0) {
-                holder.tvBadge.setText(String.valueOf(chat.unreadCount));
-                holder.tvBadge.setVisibility(View.VISIBLE);
-            } else {
-                holder.tvBadge.setVisibility(View.GONE);
-            }
-            holder.itemView.setOnClickListener(v -> listener.onChatClick(chat));
-        }
-
-        @Override
-        public int getItemCount() {
-            return items.size();
-        }
+        return true;
     }
 
-    private static class ChatViewHolder extends RecyclerView.ViewHolder {
-        TextView tvTitle, tvMessage, tvTime, tvBadge;
-
-        public ChatViewHolder(@NonNull View itemView) {
-            super(itemView);
-            tvTitle = itemView.findViewById(R.id.tvChatTitle);
-            tvMessage = itemView.findViewById(R.id.tvLastMessage);
-            tvTime = itemView.findViewById(R.id.tvChatTime);
-            tvBadge = itemView.findViewById(R.id.tvUnreadBadge);
+    @Override
+    public void onBackPressed() {
+        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START);
+        } else if (isSearching) {
+            closeSearchMode();
+        } else {
+            super.onBackPressed();
         }
     }
 }

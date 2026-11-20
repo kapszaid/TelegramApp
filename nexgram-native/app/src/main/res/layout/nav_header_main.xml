@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="176dp"
+    android:background="@color/bg_dark_secondary"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:paddingTop="36dp"
+    android:gravity="bottom">
+
+    <FrameLayout
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_marginBottom="12dp">
+
+        <ImageView
+            android:id="@+id/ivNavAvatarCircle"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/circle_avatar" />
+
+        <TextView
+            android:id="@+id/tvNavAvatarInitials"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:gravity="center"
+            android:text="NG"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/ivNavAvatarPhoto"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/tvNavUserName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="NexGram User"
+        android:textColor="@color/text_primary"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvNavUserPhone"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="+1 000 000 0000"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp" />
+
+</LinearLayout>

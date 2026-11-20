@@ -33,11 +33,16 @@ public class TdLibAccountClient {
         void onClientError(int errorCode, String errorMessage);
     }
 
+    public interface RawUpdateListener {
+        void onUpdate(TdApi.Object update);
+    }
+
     private final String accountId;
     private final File databaseDir;
     private final File filesDir;
     private final SecureSessionVault sessionVault;
     private final CopyOnWriteArrayList<StateListener> stateListeners = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<RawUpdateListener> rawUpdateListeners = new CopyOnWriteArrayList<>();
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
 
     private Client client;
@@ -78,6 +83,13 @@ public class TdLibAccountClient {
         Client.ResultHandler updateHandler = object -> {
             if (object instanceof TdApi.UpdateAuthorizationState) {
                 handleAuthStateUpdate(((TdApi.UpdateAuthorizationState) object).authorizationState);
+            }
+            for (RawUpdateListener listener : rawUpdateListeners) {
+                try {
+                    listener.onUpdate(object);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error in RawUpdateListener: " + e.getMessage());
+                }
             }
         };
 
@@ -181,6 +193,16 @@ public class TdLibAccountClient {
 
     public void removeStateListener(StateListener listener) {
         stateListeners.remove(listener);
+    }
+
+    public void addRawUpdateListener(RawUpdateListener listener) {
+        if (listener != null && !rawUpdateListeners.contains(listener)) {
+            rawUpdateListeners.add(listener);
+        }
+    }
+
+    public void removeRawUpdateListener(RawUpdateListener listener) {
+        rawUpdateListeners.remove(listener);
     }
 
     private void notifyAuthStateChanged(TdApi.AuthorizationState state) {
@@ -318,5 +340,33 @@ public class TdLibAccountClient {
             }
         }
         return file.delete();
+    }
+
+    /**
+     * Loads more chats from local database or Telegram servers into memory.
+     */
+    public void loadChats(TdApi.ChatList chatList, int limit, Client.ResultHandler handler) {
+        send(new TdApi.LoadChats(chatList != null ? chatList : new TdApi.ChatListMain(), limit), handler);
+    }
+
+    /**
+     * Retrieves a Chat object by its unique 64-bit ID.
+     */
+    public void getChat(long chatId, Client.ResultHandler handler) {
+        send(new TdApi.GetChat(chatId), handler);
+    }
+
+    /**
+     * Searches chats using TDLib native search engine.
+     */
+    public void searchChats(String query, int limit, Client.ResultHandler handler) {
+        send(new TdApi.SearchChats(query, null, limit), handler);
+    }
+
+    /**
+     * Downloads an avatar or media file by its TDLib file ID.
+     */
+    public void downloadFile(int fileId, int priority, Client.ResultHandler handler) {
+        send(new TdApi.DownloadFile(fileId, priority, 0, 0, false), handler);
     }
 }

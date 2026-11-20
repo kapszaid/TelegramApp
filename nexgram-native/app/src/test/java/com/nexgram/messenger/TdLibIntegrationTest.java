@@ -240,4 +240,73 @@ public class TdLibIntegrationTest {
         testVault.removeSession("account_main");
         assertFalse(testVault.hasSession("account_main"));
     }
+
+    @Test
+    public void testChatClassesAndFunctionsConstructors() {
+        // LoadChats
+        TdApi.LoadChats loadChats = new TdApi.LoadChats(new TdApi.ChatListMain(), 30);
+        assertEquals(TdApi.LoadChats.CONSTRUCTOR, loadChats.getConstructor());
+        assertEquals(30, loadChats.limit);
+        assertTrue(loadChats.chatList instanceof TdApi.ChatListMain);
+
+        // GetChat
+        TdApi.GetChat getChat = new TdApi.GetChat(987654321L);
+        assertEquals(TdApi.GetChat.CONSTRUCTOR, getChat.getConstructor());
+        assertEquals(987654321L, getChat.chatId);
+
+        // SearchChats
+        TdApi.SearchChats searchChats = new TdApi.SearchChats("telegram", null, 25);
+        assertEquals(TdApi.SearchChats.CONSTRUCTOR, searchChats.getConstructor());
+        assertEquals("telegram", searchChats.query);
+        assertEquals(25, searchChats.limit);
+
+        // DownloadFile
+        TdApi.DownloadFile download = new TdApi.DownloadFile(404, 2, 0, 0, false);
+        assertEquals(TdApi.DownloadFile.CONSTRUCTOR, download.getConstructor());
+        assertEquals(404, download.fileId);
+        assertEquals(2, download.priority);
+    }
+
+    @Test
+    public void testTelegramAvatarHelper() {
+        // 7 distinct official Telegram avatar colors
+        assertEquals(7, com.nexgram.messenger.ui.helpers.TelegramAvatarHelper.AVATAR_COLORS.length);
+
+        int color0 = com.nexgram.messenger.ui.helpers.TelegramAvatarHelper.getAvatarColor(0);
+        int color1 = com.nexgram.messenger.ui.helpers.TelegramAvatarHelper.getAvatarColor(1);
+        int color7 = com.nexgram.messenger.ui.helpers.TelegramAvatarHelper.getAvatarColor(7);
+        assertEquals(color0, color7); // Modulo 7 wrap-around
+        assertNotEquals(color0, color1);
+
+        // Initials extraction
+        assertEquals("AS", com.nexgram.messenger.ui.helpers.TelegramAvatarHelper.getInitials("Alice Smith"));
+        assertEquals("NE", com.nexgram.messenger.ui.helpers.TelegramAvatarHelper.getInitials("NexGram"));
+        assertEquals("TG", com.nexgram.messenger.ui.helpers.TelegramAvatarHelper.getInitials(""));
+        assertEquals("TG", com.nexgram.messenger.ui.helpers.TelegramAvatarHelper.getInitials(null));
+    }
+
+    @Test
+    public void testTelegramMessageFormatter() {
+        // Text Message
+        TdApi.FormattedText formattedText = new TdApi.FormattedText("Hello Telegram!", new TdApi.TextEntity[0]);
+        TdApi.MessageText messageText = new TdApi.MessageText(formattedText, null, null);
+        TdApi.Message msg = new TdApi.Message();
+        msg.content = messageText;
+        assertEquals("Hello Telegram!", com.nexgram.messenger.ui.helpers.TelegramMessageFormatter.formatMessagePreview(msg));
+
+        // Photo Message without caption
+        TdApi.MessagePhoto messagePhoto = new TdApi.MessagePhoto(null, null, null, false, false, false);
+        msg.content = messagePhoto;
+        assertEquals("📷 Photo", com.nexgram.messenger.ui.helpers.TelegramMessageFormatter.formatMessagePreview(msg));
+
+        // Photo Message with caption
+        TdApi.FormattedText caption = new TdApi.FormattedText("Sunset view", new TdApi.TextEntity[0]);
+        TdApi.MessagePhoto photoWithCaption = new TdApi.MessagePhoto(null, null, caption, false, false, false);
+        msg.content = photoWithCaption;
+        assertEquals("📷 Sunset view", com.nexgram.messenger.ui.helpers.TelegramMessageFormatter.formatMessagePreview(msg));
+
+        // Voice Message
+        msg.content = new TdApi.MessageVoiceNote();
+        assertEquals("🎤 Voice message", com.nexgram.messenger.ui.helpers.TelegramMessageFormatter.formatMessagePreview(msg));
+    }
 }
