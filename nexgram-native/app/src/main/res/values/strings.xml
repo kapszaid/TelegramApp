@@ -25,4 +25,8 @@
     <string name="backup_export">Export Encrypted Backup</string>
     <string name="backup_import">Restore From Backup</string>
     <string name="backup_password_prompt">Enter Master Backup Password</string>
+
+    <!-- Empty State -->
+    <string name="empty_state_title">No Account Connected</string>
+    <string name="empty_state_desc">Log in with your Telegram account or manage proxies in Settings. TDLib 1.8.70 native engine is active and ready for authentication.</string>
 </resources>

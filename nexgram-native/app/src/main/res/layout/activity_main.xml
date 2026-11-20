@@ -95,7 +95,7 @@
                 android:id="@+id/tvEmptyTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="No Account Connected"
+                android:text="@string/empty_state_title"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold"
                 android:textSize="18sp"
@@ -105,7 +105,7 @@
                 android:id="@+id/tvEmptySubtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Log in with your Telegram account or manage proxies in Settings. Real-time messages will appear once native MTProto client integration is active."
+                android:text="@string/empty_state_desc"
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp"
                 android:gravity="center" />

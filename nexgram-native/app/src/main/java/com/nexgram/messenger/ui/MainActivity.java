@@ -80,6 +80,16 @@ public class MainActivity extends AppCompatActivity {
         btnSwitchAccount.setOnClickListener(v -> showAccountSwitcherDialog());
 
         loadAccountAndData();
+        triggerTdLibSmokeTest();
+    }
+
+    private void triggerTdLibSmokeTest() {
+        NexGramApplication app = NexGramApplication.getInstance();
+        if (app != null && app.isVaultAvailable() && app.getTdLibManager() != null) {
+            app.getTdLibManager().runRuntimeSmokeTest((success, state, message) -> {
+                android.util.Log.i("MainActivity", "[TDLibSmokeTest] Result: success=" + success + ", state=" + state + ", msg=" + message);
+            });
+        }
     }
 
     @Override
