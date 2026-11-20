@@ -29,4 +29,33 @@
     <!-- Empty State -->
     <string name="empty_state_title">No Account Connected</string>
     <string name="empty_state_desc">Log in with your Telegram account or manage proxies in Settings. TDLib 1.8.70 native engine is active and ready for authentication.</string>
+    <string name="empty_state_logged_in_title">No Messages</string>
+    <string name="empty_state_logged_in_desc">No conversations yet. Real-time dialog synchronization will appear in the next milestone.</string>
+    <string name="btn_login_telegram">Log In with Telegram</string>
+
+    <!-- Authentication Flow -->
+    <string name="auth_title">Log In to Telegram</string>
+    <string name="auth_phone_title">Your Phone Number</string>
+    <string name="auth_phone_desc">Please confirm your country code and enter your phone number.</string>
+    <string name="auth_phone_hint">Phone number</string>
+    <string name="auth_country_code_hint">Code</string>
+    <string name="auth_btn_continue">Continue</string>
+    <string name="auth_otp_title">Enter Verification Code</string>
+    <string name="auth_otp_desc">We have sent a code to the Telegram app on your other device or via SMS.</string>
+    <string name="auth_otp_hint">Code</string>
+    <string name="auth_otp_verify">Verify Code</string>
+    <string name="auth_otp_resend">Resend Code</string>
+    <string name="auth_otp_wrong_number">Wrong number?</string>
+    <string name="auth_2fa_title">Two-Step Verification</string>
+    <string name="auth_2fa_desc">Your account is protected with an additional password.</string>
+    <string name="auth_2fa_hint">Password</string>
+    <string name="auth_2fa_submit">Submit Password</string>
+    <string name="auth_register_title">Your Name</string>
+    <string name="auth_register_desc">Enter your name to complete your Telegram profile.</string>
+    <string name="auth_first_name_hint">First Name (required)</string>
+    <string name="auth_last_name_hint">Last Name (optional)</string>
+    <string name="auth_register_submit">Complete Registration</string>
+    <string name="auth_connecting">Connecting to Telegram servers…</string>
+    <string name="auth_logging_in">Signing in…</string>
+    <string name="auth_success">Authentication successful!</string>
 </resources>

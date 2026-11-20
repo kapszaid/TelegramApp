@@ -21,10 +21,13 @@
 
         <!-- Account Section Card -->
         <androidx.cardview.widget.CardView
+            android:id="@+id/cardAccountProfile"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:backgroundTint="@color/bg_dark_card">
+            android:backgroundTint="@color/bg_dark_card"
+            android:clickable="true"
+            android:focusable="true">
 
             <LinearLayout
                 android:layout_width="match_parent"

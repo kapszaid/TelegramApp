@@ -150,4 +150,94 @@ public class TdLibIntegrationTest {
         assertTrue(dirAlice.getAbsolutePath().endsWith("alice_991"));
         assertTrue(dirBob.getAbsolutePath().endsWith("bob_992"));
     }
+
+    @Test
+    public void testAuthenticationFunctionsConstructors() {
+        // 1. SetAuthenticationPhoneNumber
+        TdApi.PhoneNumberAuthenticationSettings settings = new TdApi.PhoneNumberAuthenticationSettings();
+        TdApi.SetAuthenticationPhoneNumber setPhone = new TdApi.SetAuthenticationPhoneNumber("+1234567890", settings);
+        assertEquals(TdApi.SetAuthenticationPhoneNumber.CONSTRUCTOR, setPhone.getConstructor());
+        assertEquals("+1234567890", setPhone.phoneNumber);
+        assertNotNull(setPhone.settings);
+
+        // 2. CheckAuthenticationCode
+        TdApi.CheckAuthenticationCode checkCode = new TdApi.CheckAuthenticationCode("54321");
+        assertEquals(TdApi.CheckAuthenticationCode.CONSTRUCTOR, checkCode.getConstructor());
+        assertEquals("54321", checkCode.code);
+
+        // 3. CheckAuthenticationPassword
+        TdApi.CheckAuthenticationPassword checkPassword = new TdApi.CheckAuthenticationPassword("secret_2fa_pwd");
+        assertEquals(TdApi.CheckAuthenticationPassword.CONSTRUCTOR, checkPassword.getConstructor());
+        assertEquals("secret_2fa_pwd", checkPassword.password);
+
+        // 4. RegisterUser
+        TdApi.RegisterUser register = new TdApi.RegisterUser("Alice", "Smith", false);
+        assertEquals(TdApi.RegisterUser.CONSTRUCTOR, register.getConstructor());
+        assertEquals("Alice", register.firstName);
+        assertEquals("Smith", register.lastName);
+        assertFalse(register.disableNotification);
+
+        // 5. ResendAuthenticationCode
+        TdApi.ResendAuthenticationCode resend = new TdApi.ResendAuthenticationCode();
+        assertEquals(TdApi.ResendAuthenticationCode.CONSTRUCTOR, resend.getConstructor());
+
+        // 6. LogOut
+        TdApi.LogOut logOut = new TdApi.LogOut();
+        assertEquals(TdApi.LogOut.CONSTRUCTOR, logOut.getConstructor());
+
+        // 7. GetMe
+        TdApi.GetMe getMe = new TdApi.GetMe();
+        assertEquals(TdApi.GetMe.CONSTRUCTOR, getMe.getConstructor());
+    }
+
+    @Test
+    public void testAllAuthorizationStatesResolved() {
+        // Verify all states required by Milestone 2.3 are resolvable from TDLib AAR classes
+        assertNotNull(TdApi.AuthorizationStateWaitTdlibParameters.class);
+        assertNotNull(TdApi.AuthorizationStateWaitPhoneNumber.class);
+        assertNotNull(TdApi.AuthorizationStateWaitCode.class);
+        assertNotNull(TdApi.AuthorizationStateWaitPassword.class);
+        assertNotNull(TdApi.AuthorizationStateWaitRegistration.class);
+        assertNotNull(TdApi.AuthorizationStateWaitEmailAddress.class);
+        assertNotNull(TdApi.AuthorizationStateWaitEmailCode.class);
+        assertNotNull(TdApi.AuthorizationStateWaitOtherDeviceConfirmation.class);
+        assertNotNull(TdApi.AuthorizationStateReady.class);
+        assertNotNull(TdApi.AuthorizationStateLoggingOut.class);
+        assertNotNull(TdApi.AuthorizationStateClosing.class);
+        assertNotNull(TdApi.AuthorizationStateClosed.class);
+    }
+
+    @Test
+    public void testDatabaseKeyPersistenceAcrossAppRestart() {
+        MockSharedPreferences mockPrefs = new MockSharedPreferences();
+        SecureSessionVault initialVault = new SecureSessionVault(mockPrefs, true);
+
+        // Simulate first run: generate 32-byte database encryption key
+        byte[] keyFirstRun = initialVault.getOrCreateDatabaseKey("account_main");
+        assertNotNull(keyFirstRun);
+        assertEquals(32, keyFirstRun.length);
+
+        // Simulate application restart: new Vault instance loaded against existing storage
+        SecureSessionVault restartedVault = new SecureSessionVault(mockPrefs, true);
+        byte[] keyRestart = restartedVault.getOrCreateDatabaseKey("account_main");
+        assertNotNull(keyRestart);
+        assertEquals(32, keyRestart.length);
+
+        // Keys MUST be 100% byte-for-byte identical so TDLib can decrypt existing database
+        org.junit.Assert.assertArrayEquals("Database encryption key must persist across restarts", keyFirstRun, keyRestart);
+    }
+
+    @Test
+    public void testSessionRevocationAndCleanup() {
+        MockSharedPreferences mockPrefs = new MockSharedPreferences();
+        SecureSessionVault testVault = new SecureSessionVault(mockPrefs, true);
+
+        testVault.saveSession("account_main", "mock_auth_key_material");
+        assertTrue(testVault.hasSession("account_main"));
+        assertEquals("mock_auth_key_material", testVault.getSession("account_main"));
+
+        // Simulate session revocation / logout cleanup
+        testVault.removeSession("account_main");
+        assertFalse(testVault.hasSession("account_main"));
+    }
 }

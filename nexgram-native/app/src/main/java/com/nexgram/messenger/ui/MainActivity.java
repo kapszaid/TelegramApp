@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.nexgram.messenger.NexGramApplication;
 import com.nexgram.messenger.R;
 import com.nexgram.messenger.auth.AccountManager;
+import com.nexgram.messenger.tdlib.TdLibManager;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -52,6 +53,8 @@ public class MainActivity extends AppCompatActivity {
     private Button btnSwitchAccount;
     private RecyclerView recyclerViewChats;
     private View layoutEmptyState;
+    private TextView tvEmptyTitle, tvEmptySubtitle;
+    private Button btnEmptyStateLogin;
     private ChatAdapter chatAdapter;
     private final List<ChatSummary> chatList = new ArrayList<>();
 
@@ -67,6 +70,9 @@ public class MainActivity extends AppCompatActivity {
         btnSwitchAccount = findViewById(R.id.btnSwitchAccount);
         recyclerViewChats = findViewById(R.id.recyclerViewChats);
         layoutEmptyState = findViewById(R.id.layoutEmptyState);
+        tvEmptyTitle = findViewById(R.id.tvEmptyTitle);
+        tvEmptySubtitle = findViewById(R.id.tvEmptySubtitle);
+        btnEmptyStateLogin = findViewById(R.id.btnEmptyStateLogin);
 
         recyclerViewChats.setLayoutManager(new LinearLayoutManager(this));
         chatAdapter = new ChatAdapter(chatList, chat -> {
@@ -78,6 +84,12 @@ public class MainActivity extends AppCompatActivity {
         recyclerViewChats.setAdapter(chatAdapter);
 
         btnSwitchAccount.setOnClickListener(v -> showAccountSwitcherDialog());
+        if (btnEmptyStateLogin != null) {
+            btnEmptyStateLogin.setOnClickListener(v -> {
+                Intent intent = new Intent(MainActivity.this, AuthActivity.class);
+                startActivity(intent);
+            });
+        }
 
         loadAccountAndData();
         triggerTdLibSmokeTest();
@@ -105,9 +117,37 @@ public class MainActivity extends AppCompatActivity {
         if (active != null) {
             tvActiveAccountName.setText(active.name + " (" + active.phone + ")");
             btnSwitchAccount.setVisibility(manager.getAccountCount() > 1 ? View.VISIBLE : View.GONE);
+            if (tvEmptyTitle != null) tvEmptyTitle.setText(R.string.empty_state_logged_in_title);
+            if (tvEmptySubtitle != null) tvEmptySubtitle.setText(R.string.empty_state_logged_in_desc);
+            if (btnEmptyStateLogin != null) btnEmptyStateLogin.setVisibility(View.GONE);
+
+            // Reopen and monitor existing TDLib client for session validity
+            TdLibManager tdManager = NexGramApplication.getInstance().getTdLibManager();
+            if (tdManager != null) {
+                com.nexgram.messenger.tdlib.TdLibAccountClient client = tdManager.getOrCreateClient(active.id);
+                client.addStateListener(new com.nexgram.messenger.tdlib.TdLibAccountClient.StateListener() {
+                    @Override
+                    public void onAuthorizationStateChanged(org.drinkless.tdlib.TdApi.AuthorizationState newState) {
+                        if (newState instanceof org.drinkless.tdlib.TdApi.AuthorizationStateWaitPhoneNumber) {
+                            runOnUiThread(() -> {
+                                android.util.Log.w("MainActivity", "Session expired or revoked for account: " + active.id);
+                                Toast.makeText(MainActivity.this, "Session expired or revoked. Please log in again.", Toast.LENGTH_LONG).show();
+                                manager.removeAccount(active.id);
+                                loadAccountAndData();
+                            });
+                        }
+                    }
+
+                    @Override
+                    public void onClientError(int errorCode, String errorMessage) {}
+                });
+            }
         } else {
             tvActiveAccountName.setText("No Account Connected");
             btnSwitchAccount.setVisibility(View.GONE);
+            if (tvEmptyTitle != null) tvEmptyTitle.setText(R.string.empty_state_title);
+            if (tvEmptySubtitle != null) tvEmptySubtitle.setText(R.string.empty_state_desc);
+            if (btnEmptyStateLogin != null) btnEmptyStateLogin.setVisibility(View.VISIBLE);
         }
 
         // STRICT ACCURACY: No fake chats inserted!

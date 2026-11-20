@@ -1,5 +1,6 @@
 package com.nexgram.messenger.ui;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -16,6 +17,8 @@ import com.nexgram.messenger.NexGramApplication;
 import com.nexgram.messenger.R;
 import com.nexgram.messenger.auth.AccountManager;
 import com.nexgram.messenger.proxy.ProxyController;
+import com.nexgram.messenger.tdlib.TdLibAccountClient;
+import com.nexgram.messenger.tdlib.TdLibManager;
 
 /**
  * Native Settings Activity
@@ -29,7 +32,7 @@ public class SettingsActivity extends AppCompatActivity {
 
     private TextView tvSettingsUser, tvSettingsPhone, tvProxyStatus;
     private Button btnLogout;
-    private CardView cardProxy, cardBackup;
+    private CardView cardAccountProfile, cardProxy, cardBackup;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,15 +47,31 @@ public class SettingsActivity extends AppCompatActivity {
         tvSettingsUser = findViewById(R.id.tvSettingsUser);
         tvSettingsPhone = findViewById(R.id.tvSettingsPhone);
         tvProxyStatus = findViewById(R.id.tvProxyStatus);
+        cardAccountProfile = findViewById(R.id.cardAccountProfile);
         cardProxy = findViewById(R.id.cardProxySettings);
         cardBackup = findViewById(R.id.cardBackup);
         btnLogout = findViewById(R.id.btnSettingsLogout);
 
         loadProfile();
 
+        if (cardAccountProfile != null) {
+            cardAccountProfile.setOnClickListener(v -> {
+                AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+                if (manager == null || manager.getActiveAccount() == null) {
+                    startActivity(new Intent(SettingsActivity.this, AuthActivity.class));
+                }
+            });
+        }
+
         cardProxy.setOnClickListener(v -> showProxyConfigurationDialog());
         cardBackup.setOnClickListener(v -> showBackupInfoDialog());
         btnLogout.setOnClickListener(v -> confirmLogout());
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        loadProfile();
     }
 
     private void loadProfile() {
@@ -64,7 +83,7 @@ public class SettingsActivity extends AppCompatActivity {
             btnLogout.setVisibility(View.VISIBLE);
         } else {
             tvSettingsUser.setText("No Active User");
-            tvSettingsPhone.setText("Tap to add an account (Protocol integration pending)");
+            tvSettingsPhone.setText("Tap to log in with Telegram");
             btnLogout.setVisibility(View.GONE);
         }
 
@@ -171,6 +190,17 @@ public class SettingsActivity extends AppCompatActivity {
                 .setTitle("Log Out?")
                 .setMessage("Are you sure you want to log out from " + active.name + "? All authentication tokens will be securely wiped from the Android Keystore.")
                 .setPositiveButton("Log Out", (dialog, which) -> {
+                    TdLibManager tdManager = NexGramApplication.getInstance().getTdLibManager();
+                    if (tdManager != null) {
+                        TdLibAccountClient client = tdManager.getClient(active.id);
+                        if (client != null) {
+                            client.logOut(result -> {
+                                android.util.Log.i("SettingsActivity", "TDLib logOut finished: " + result);
+                                client.deleteDatabaseFiles();
+                            });
+                        }
+                        tdManager.closeClient(active.id);
+                    }
                     manager.removeAccount(active.id);
                     Toast.makeText(this, "Logged out. Session wiped from Keystore.", Toast.LENGTH_SHORT).show();
                     loadProfile();

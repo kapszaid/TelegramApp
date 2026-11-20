@@ -109,6 +109,16 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp"
                 android:gravity="center" />
+
+            <Button
+                android:id="@+id/btnEmptyStateLogin"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_login_telegram"
+                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/primary"
+                android:layout_marginTop="20dp"
+                style="@style/Widget.MaterialComponents.Button" />
         </LinearLayout>
 
     </FrameLayout>

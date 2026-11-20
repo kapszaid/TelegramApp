@@ -92,17 +92,36 @@ public class TdLibAccountClient {
 
     private void handleAuthStateUpdate(TdApi.AuthorizationState authState) {
         this.currentAuthState = authState;
-        Log.i(TAG, "Account " + accountId + " AuthState: " + authState.getClass().getSimpleName());
+        String stateName = authState != null ? authState.getClass().getSimpleName() : "null";
+        Log.i(TAG, "Account " + accountId + " AuthState updated: " + stateName);
 
         if (authState instanceof TdApi.AuthorizationStateWaitTdlibParameters) {
             sendTdlibParameters();
         } else if (authState instanceof TdApi.AuthorizationStateWaitPhoneNumber) {
-            Log.i(TAG, "Account " + accountId + " is ready for phone number authentication.");
+            Log.i(TAG, "Account " + accountId + ": Waiting for phone number input.");
+        } else if (authState instanceof TdApi.AuthorizationStateWaitCode) {
+            Log.i(TAG, "Account " + accountId + ": Waiting for OTP verification code.");
+        } else if (authState instanceof TdApi.AuthorizationStateWaitPassword) {
+            Log.i(TAG, "Account " + accountId + ": Waiting for 2FA password.");
+        } else if (authState instanceof TdApi.AuthorizationStateWaitRegistration) {
+            Log.i(TAG, "Account " + accountId + ": Waiting for profile registration (new user).");
+        } else if (authState instanceof TdApi.AuthorizationStateWaitEmailAddress) {
+            Log.i(TAG, "Account " + accountId + ": Waiting for authentication email address.");
+        } else if (authState instanceof TdApi.AuthorizationStateWaitEmailCode) {
+            Log.i(TAG, "Account " + accountId + ": Waiting for authentication email code.");
+        } else if (authState instanceof TdApi.AuthorizationStateWaitOtherDeviceConfirmation) {
+            Log.i(TAG, "Account " + accountId + ": Waiting for other device QR confirmation.");
         } else if (authState instanceof TdApi.AuthorizationStateReady) {
-            Log.i(TAG, "Account " + accountId + " authorization completed. TDLib engine online.");
+            Log.i(TAG, "Account " + accountId + ": Authorization complete. Client ready.");
+        } else if (authState instanceof TdApi.AuthorizationStateLoggingOut) {
+            Log.i(TAG, "Account " + accountId + ": Client is logging out from Telegram servers.");
+        } else if (authState instanceof TdApi.AuthorizationStateClosing) {
+            Log.i(TAG, "Account " + accountId + ": Client connection closing.");
         } else if (authState instanceof TdApi.AuthorizationStateClosed) {
-            Log.i(TAG, "Account " + accountId + " client closed.");
+            Log.i(TAG, "Account " + accountId + ": Client connection closed.");
             isClosed.set(true);
+        } else {
+            Log.w(TAG, "Account " + accountId + ": Unhandled or unexpected state: " + (authState != null ? authState.getClass().getName() : "null"));
         }
 
         notifyAuthStateChanged(authState);
@@ -209,5 +228,95 @@ public class TdLibAccountClient {
 
     public boolean isClosed() {
         return isClosed.get();
+    }
+
+    /**
+     * Submits phone number to Telegram MTProto server to initiate authorization.
+     */
+    public void setAuthenticationPhoneNumber(String phoneNumber, Client.ResultHandler handler) {
+        if (phoneNumber == null || phoneNumber.trim().isEmpty()) {
+            if (handler != null) handler.onResult(new TdApi.Error(400, "Phone number cannot be empty"));
+            return;
+        }
+        TdApi.PhoneNumberAuthenticationSettings settings = new TdApi.PhoneNumberAuthenticationSettings();
+        send(new TdApi.SetAuthenticationPhoneNumber(phoneNumber.trim(), settings), handler);
+    }
+
+    /**
+     * Submits OTP verification code received via Telegram app or SMS.
+     * The code is passed directly to native TDLib in memory and never logged or persisted.
+     */
+    public void checkAuthenticationCode(String code, Client.ResultHandler handler) {
+        if (code == null || code.trim().isEmpty()) {
+            if (handler != null) handler.onResult(new TdApi.Error(400, "Verification code cannot be empty"));
+            return;
+        }
+        send(new TdApi.CheckAuthenticationCode(code.trim()), handler);
+    }
+
+    /**
+     * Submits Two-Step Verification (2FA) cloud password.
+     * The password is encrypted in native TDLib via SRP (Secure Remote Password) protocol
+     * and never logged or stored in plaintext.
+     */
+    public void checkAuthenticationPassword(String password, Client.ResultHandler handler) {
+        if (password == null) {
+            if (handler != null) handler.onResult(new TdApi.Error(400, "Password cannot be null"));
+            return;
+        }
+        send(new TdApi.CheckAuthenticationPassword(password), handler);
+    }
+
+    /**
+     * Registers a new Telegram user (first and last name) if account does not exist.
+     */
+    public void registerUser(String firstName, String lastName, Client.ResultHandler handler) {
+        if (firstName == null || firstName.trim().isEmpty()) {
+            if (handler != null) handler.onResult(new TdApi.Error(400, "First name cannot be empty"));
+            return;
+        }
+        send(new TdApi.RegisterUser(firstName.trim(), lastName != null ? lastName.trim() : "", false), handler);
+    }
+
+    /**
+     * Requests resending the authentication code.
+     */
+    public void resendAuthenticationCode(Client.ResultHandler handler) {
+        send(new TdApi.ResendAuthenticationCode(), handler);
+    }
+
+    /**
+     * Logs out the user from Telegram MTProto servers and revokes this session.
+     */
+    public void logOut(Client.ResultHandler handler) {
+        send(new TdApi.LogOut(), handler);
+    }
+
+    /**
+     * Queries current authorized user information (GetMe).
+     */
+    public void getMe(Client.ResultHandler handler) {
+        send(new TdApi.GetMe(), handler);
+    }
+
+    /**
+     * Deletes local database files upon explicit account logout.
+     */
+    public void deleteDatabaseFiles() {
+        deleteRecursively(databaseDir);
+        deleteRecursively(filesDir);
+    }
+
+    private boolean deleteRecursively(File file) {
+        if (file == null || !file.exists()) return true;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteRecursively(child);
+                }
+            }
+        }
+        return file.delete();
     }
 }

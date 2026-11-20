@@ -40,6 +40,12 @@
             android:name=".ui.SettingsActivity"
             android:exported="false" />
 
+        <!-- Native Telegram Authentication Activity -->
+        <activity
+            android:name=".ui.AuthActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Native Background Sync Service -->
         <service
             android:name=".network.TelegramClientService"
