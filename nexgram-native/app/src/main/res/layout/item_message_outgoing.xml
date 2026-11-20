@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingStart="48dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp"
+    android:gravity="end">
+
+    <LinearLayout
+        android:id="@+id/bubbleOutgoing"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_bubble_outgoing"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <!-- Message Body Text -->
+        <TextView
+            android:id="@+id/tvMessageText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:lineSpacingExtra="2dp" />
+
+        <!-- Timestamp and Status Container -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="2dp">
+
+            <TextView
+                android:id="@+id/tvMessageTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#82A7C9"
+                android:textSize="11sp" />
+
+            <ImageView
+                android:id="@+id/ivDeliveryStatus"
+                android:layout_width="14dp"
+                android:layout_height="12dp"
+                android:layout_marginStart="4dp"
+                android:src="@drawable/ic_check_double"
+                app:tint="#82A7C9"
+                android:contentDescription="Status" />
+        </LinearLayout>
+
+    </LinearLayout>
+</LinearLayout>

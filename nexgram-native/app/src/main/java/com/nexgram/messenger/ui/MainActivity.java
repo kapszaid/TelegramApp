@@ -19,7 +19,11 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
+import androidx.core.graphics.Insets;
 import androidx.core.view.GravityCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -96,6 +100,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         setContentView(R.layout.activity_main);
 
         initViews();
+        setupWindowInsets();
         setupNavigationDrawer();
         setupFolderTabs();
         setupSearch();
@@ -138,6 +143,21 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             } else {
                 swipeRefreshLayout.setRefreshing(false);
             }
+        });
+    }
+
+    private void setupWindowInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(drawerLayout, (v, windowInsets) -> {
+            Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+            recyclerViewChats.setPadding(0, 0, 0, insets.bottom);
+            recyclerViewChats.setClipToPadding(false);
+            if (fabNewChat.getLayoutParams() instanceof CoordinatorLayout.LayoutParams) {
+                CoordinatorLayout.LayoutParams lp = (CoordinatorLayout.LayoutParams) fabNewChat.getLayoutParams();
+                int baseMargin = (int) (16 * getResources().getDisplayMetrics().density);
+                lp.bottomMargin = insets.bottom + baseMargin;
+                fabNewChat.setLayoutParams(lp);
+            }
+            return windowInsets;
         });
     }
 
