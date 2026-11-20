@@ -8,7 +8,7 @@ This report provides the research, compatibility analysis, and technical archite
 - **Zero Mock / Fake Protocol Code:** No simulated MTProto or mock messaging.
 - **Independent NexGram UI & Branding:** Custom layouts, colors (`#2AABEE`, `#0E1621`), disclaimer banners, and navigation remain 100% independent.
 - **Hardware Constraint Compliance:** Designed specifically for developer machines with **8 GB DDR3 RAM**, ensuring Gradle heap limits do not exceed 3 GB and avoiding RAM-heavy emulators by targeting direct physical Android device testing.
-- **Security-First Credential Handling:** Reusing existing registered `API_ID: 35915345` and `API_HASH: c30ef6d70f443b8081e3b543800cf9bf` injected solely via `local.properties` (git-ignored) and GitHub Actions Secrets. Zero hardcoded secrets in version control.
+- **Security-First Credential Handling:** Reusing registered `API_ID: <YOUR_TELEGRAM_API_ID>` and `API_HASH: <YOUR_TELEGRAM_API_HASH>` injected solely via `local.properties` (git-ignored) and GitHub Actions Secrets. Zero hardcoded secrets in version control.
 - **Preservation of Legacy Prototype:** The existing Capacitor web-wrapper prototype remains untouched.
 
 ---
@@ -225,9 +225,9 @@ ConnectionsManager.native_setProxySettings(
 ---
 
 ### 3.7 Safe Credential Configuration & CI
-- **Registered Credentials Reused:**
-  * `API_ID`: `35915345`
-  * `API_HASH`: `c30ef6d70f443b8081e3b543800cf9bf`
+- **Registered Credentials Configured via Environment:**
+  * `API_ID`: `<YOUR_TELEGRAM_API_ID>`
+  * `API_HASH`: `<YOUR_TELEGRAM_API_HASH>`
 - **Zero Secrets Committed:**
   * `nexgram-native/gradle.properties` contains dummy defaults: `TELEGRAM_APP_ID=0`, `TELEGRAM_APP_HASH=`.
   * Real credentials are read dynamically from:
