@@ -364,4 +364,41 @@ public class TdLibIntegrationTest {
         TdApi.ConnectionStateConnectingToProxy connToProxy = new TdApi.ConnectionStateConnectingToProxy();
         assertEquals(TdApi.ConnectionStateConnectingToProxy.CONSTRUCTOR, connToProxy.getConstructor());
     }
+
+    @Test
+    public void testMessageDeduplicationAndSendStateSuccess() {
+        com.nexgram.messenger.ui.adapter.MessageAdapter adapter = new com.nexgram.messenger.ui.adapter.MessageAdapter(null);
+
+        // 1. Initial pending outgoing message (oldMessageId = -1001)
+        TdApi.Message pendingMsg = new TdApi.Message();
+        pendingMsg.id = -1001L;
+        pendingMsg.isOutgoing = true;
+        pendingMsg.date = 1700000000;
+        pendingMsg.sendingState = new TdApi.MessageSendingStatePending();
+        TdApi.FormattedText text = new TdApi.FormattedText("Hello", new TdApi.TextEntity[0]);
+        pendingMsg.content = new TdApi.MessageText(text, null, null);
+
+        adapter.appendOrUpdateMessage(pendingMsg);
+        // Expect 2 items: 1 DateHeader + 1 MessageItem
+        assertEquals(2, adapter.getItemCount());
+
+        // 2. Duplicate arrival of same pending message MUST NOT add duplicate bubble
+        adapter.appendOrUpdateMessage(pendingMsg);
+        assertEquals("Duplicate message must be deduplicated in place", 2, adapter.getItemCount());
+
+        // 3. UpdateMessageSendSucceeded event arrives: oldMessageId replaced by permanent server ID 5555L, sendingState becomes null
+        TdApi.Message serverMsg = new TdApi.Message();
+        serverMsg.id = 5555L;
+        serverMsg.isOutgoing = true;
+        serverMsg.date = 1700000000;
+        serverMsg.sendingState = null; // server confirmed
+        serverMsg.content = new TdApi.MessageText(text, null, null);
+
+        adapter.onMessageSendSucceeded(-1001L, serverMsg);
+        assertEquals("Item count must remain unchanged after send success", 2, adapter.getItemCount());
+
+        // 4. Another UpdateNewMessage with serverMsg MUST NOT duplicate
+        adapter.appendOrUpdateMessage(serverMsg);
+        assertEquals("Server confirmed message must not duplicate", 2, adapter.getItemCount());
+    }
 }

@@ -328,14 +328,9 @@ public class ChatActivity extends AppCompatActivity {
         TdApi.SendMessage sendRequest = new TdApi.SendMessage(chatId, null, null, null, null, inputContent);
 
         activeClient.send(sendRequest, result -> {
-            if (result instanceof TdApi.Message) {
-                TdApi.Message sentMsg = (TdApi.Message) result;
-                runOnUiThread(() -> {
-                    messageAdapter.appendMessage(sentMsg);
-                    recyclerViewMessages.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
-                    tvEmptyMessages.setVisibility(View.GONE);
-                });
-            } else if (result instanceof TdApi.Error) {
+            // Note: TDLib automatically dispatches UpdateNewMessage for this outgoing message!
+            // We do NOT manually append here to avoid duplicate bubbles.
+            if (result instanceof TdApi.Error) {
                 TdApi.Error err = (TdApi.Error) result;
                 runOnUiThread(() ->
                     Toast.makeText(this, "Failed to send: " + err.message, Toast.LENGTH_SHORT).show()
@@ -349,7 +344,7 @@ public class ChatActivity extends AppCompatActivity {
             TdApi.UpdateNewMessage updateMsg = (TdApi.UpdateNewMessage) update;
             if (updateMsg.message.chatId == chatId) {
                 runOnUiThread(() -> {
-                    messageAdapter.appendMessage(updateMsg.message);
+                    messageAdapter.appendOrUpdateMessage(updateMsg.message);
                     recyclerViewMessages.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
                     tvEmptyMessages.setVisibility(View.GONE);
 
@@ -366,13 +361,13 @@ public class ChatActivity extends AppCompatActivity {
         } else if (update instanceof TdApi.UpdateMessageSendSucceeded) {
             TdApi.UpdateMessageSendSucceeded succ = (TdApi.UpdateMessageSendSucceeded) update;
             if (succ.message.chatId == chatId) {
-                runOnUiThread(() -> messageAdapter.notifyDataSetChanged());
+                runOnUiThread(() -> messageAdapter.onMessageSendSucceeded(succ.oldMessageId, succ.message));
             }
         } else if (update instanceof TdApi.UpdateMessageSendFailed) {
             TdApi.UpdateMessageSendFailed fail = (TdApi.UpdateMessageSendFailed) update;
             if (fail.message.chatId == chatId) {
                 runOnUiThread(() -> {
-                    messageAdapter.notifyDataSetChanged();
+                    messageAdapter.onMessageSendFailed(fail.oldMessageId, fail.message);
                     String errMsg = fail.error != null ? fail.error.message : "Error";
                     Toast.makeText(this, "Send failed: " + errMsg, Toast.LENGTH_SHORT).show();
                 });

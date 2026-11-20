@@ -1,6 +1,7 @@
 package com.nexgram.messenger.ui.adapter;
 
 import android.content.Context;
+import android.graphics.PorterDuff;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,6 +16,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import org.drinkless.tdlib.TdApi;
@@ -24,7 +26,8 @@ import org.drinkless.tdlib.TdApi;
  * Renders authentic Telegram conversation bubbles matching the official Telegram Android app:
  * - Incoming bubble (#182533) left-aligned with sender name and timestamp
  * - Outgoing bubble (#2B5278) right-aligned with timestamp and read/sent checkmarks
- * - Date header pill ("Today", "Yesterday", date)
+ * - Seamless transition from pending (clock icon) to sent (single check) / read (double check)
+ * - Strict deduplication preventing duplicate message bubbles
  */
 public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
@@ -71,30 +74,35 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         this.isGroupChat = isGroupChat;
     }
 
-    public void setLastReadOutboxMessageId(long lastReadOutboxMessageId) {
+    public synchronized void setLastReadOutboxMessageId(long lastReadOutboxMessageId) {
         this.lastReadOutboxMessageId = lastReadOutboxMessageId;
-        notifyDataSetChanged();
+        safeNotifyDataSetChanged();
     }
 
-    public void setMessages(List<TdApi.Message> rawMessages) {
+    public synchronized void setMessages(List<TdApi.Message> rawMessages) {
         items.clear();
         if (rawMessages == null || rawMessages.isEmpty()) {
-            notifyDataSetChanged();
+            safeNotifyDataSetChanged();
             return;
         }
 
-        // Raw messages from TDLib GetChatHistory are usually from newest to oldest.
-        // For standard chronological display (oldest at top, newest at bottom),
-        // we reverse if needed so items go chronologically.
         List<TdApi.Message> chronological = new ArrayList<>(rawMessages);
         if (chronological.size() > 1 && chronological.get(0).date > chronological.get(chronological.size() - 1).date) {
             java.util.Collections.reverse(chronological);
         }
 
+        // Deduplicate messages by their unique 64-bit TDLib ID
+        LinkedHashMap<Long, TdApi.Message> uniqueMessages = new LinkedHashMap<>();
+        for (TdApi.Message msg : chronological) {
+            if (msg != null) {
+                uniqueMessages.put(msg.id, msg);
+            }
+        }
+
         int lastDayOfYear = -1;
         int lastYear = -1;
 
-        for (TdApi.Message msg : chronological) {
+        for (TdApi.Message msg : uniqueMessages.values()) {
             if (msg.date > 0) {
                 Calendar cal = Calendar.getInstance();
                 cal.setTimeInMillis(msg.date * 1000L);
@@ -110,12 +118,34 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             items.add(new MessageItem(msg));
         }
 
-        notifyDataSetChanged();
+        safeNotifyDataSetChanged();
     }
 
-    public void appendMessage(TdApi.Message msg) {
+    public synchronized void appendMessage(TdApi.Message msg) {
+        appendOrUpdateMessage(msg);
+    }
+
+    /**
+     * Appends a new message or updates an existing message with matching ID.
+     * Prevents duplicate bubbles when TDLib sends UpdateNewMessage or SendMessage result.
+     */
+    public synchronized void appendOrUpdateMessage(TdApi.Message msg) {
         if (msg == null) return;
-        // Check if date header needed
+
+        // Check if message already exists by ID
+        for (int i = 0; i < items.size(); i++) {
+            Item it = items.get(i);
+            if (it instanceof MessageItem) {
+                MessageItem mi = (MessageItem) it;
+                if (mi.message.id == msg.id) {
+                    items.set(i, new MessageItem(msg));
+                    safeNotifyItemChanged(i);
+                    return;
+                }
+            }
+        }
+
+        // Add date header if crossing a calendar day boundary
         if (items.isEmpty()) {
             items.add(new DateHeaderItem(formatDateHeader(msg.date * 1000L)));
         } else {
@@ -132,8 +162,67 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 }
             }
         }
+
         items.add(new MessageItem(msg));
-        notifyItemInserted(items.size() - 1);
+        safeNotifyItemInserted(items.size() - 1);
+    }
+
+    /**
+     * Handles TDLib UpdateMessageSendSucceeded event.
+     * Replaces pending message (oldMessageId) with final server message (sendingState == null),
+     * instantly updating the clock pending icon to a single or double delivery checkmark.
+     */
+    public synchronized void onMessageSendSucceeded(long oldMessageId, TdApi.Message newMessage) {
+        if (newMessage == null) return;
+        for (int i = 0; i < items.size(); i++) {
+            Item it = items.get(i);
+            if (it instanceof MessageItem) {
+                MessageItem mi = (MessageItem) it;
+                if (mi.message.id == oldMessageId || mi.message.id == newMessage.id) {
+                    items.set(i, new MessageItem(newMessage));
+                    safeNotifyItemChanged(i);
+                    return;
+                }
+            }
+        }
+        // If not found (e.g. sent before activity opened), append cleanly
+        appendOrUpdateMessage(newMessage);
+    }
+
+    /**
+     * Handles TDLib UpdateMessageSendFailed event.
+     */
+    public synchronized void onMessageSendFailed(long oldMessageId, TdApi.Message failedMessage) {
+        if (failedMessage == null) return;
+        for (int i = 0; i < items.size(); i++) {
+            Item it = items.get(i);
+            if (it instanceof MessageItem) {
+                MessageItem mi = (MessageItem) it;
+                if (mi.message.id == oldMessageId || mi.message.id == failedMessage.id) {
+                    items.set(i, new MessageItem(failedMessage));
+                    safeNotifyItemChanged(i);
+                    return;
+                }
+            }
+        }
+    }
+
+    private void safeNotifyDataSetChanged() {
+        try {
+            notifyDataSetChanged();
+        } catch (Throwable ignored) {}
+    }
+
+    private void safeNotifyItemChanged(int position) {
+        try {
+            notifyItemChanged(position);
+        } catch (Throwable ignored) {}
+    }
+
+    private void safeNotifyItemInserted(int position) {
+        try {
+            notifyItemInserted(position);
+        } catch (Throwable ignored) {}
     }
 
     @Override
@@ -180,11 +269,17 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
         // Delivery status tick
         if (message.sendingState != null) {
+            // Pending / Sending: Clock icon
             holder.ivDeliveryStatus.setImageResource(R.drawable.ic_clock_pending);
+            holder.ivDeliveryStatus.setColorFilter(0xFF82A7C9, PorterDuff.Mode.SRC_IN);
         } else if (message.id <= lastReadOutboxMessageId && lastReadOutboxMessageId > 0) {
+            // Read: Double checkmark
             holder.ivDeliveryStatus.setImageResource(R.drawable.ic_check_double);
+            holder.ivDeliveryStatus.setColorFilter(0xFF82A7C9, PorterDuff.Mode.SRC_IN);
         } else {
+            // Sent: Single checkmark
             holder.ivDeliveryStatus.setImageResource(R.drawable.ic_check_single);
+            holder.ivDeliveryStatus.setColorFilter(0xFF82A7C9, PorterDuff.Mode.SRC_IN);
         }
     }
 
