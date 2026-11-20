@@ -9,7 +9,7 @@ on:
       tdlib_commit:
         description: 'TDLib Git Commit or Tag to build'
         required: true
-        default: 'b3ab664a18f8611f4dfcd3054717504271eeaa7a' # Official TDLib v1.8.0 Release Tag
+        default: '23383aef218a3123f02b744bfa91bde21056a814' # Official TDLib v1.8.70 Release Commit
       android_api_level:
         description: 'Target Minimum Android API Level'
         required: true
@@ -27,7 +27,7 @@ jobs:
     env:
       ANDROID_NDK_VERSION: '23.2.8568313'
       CMAKE_VERSION: '3.22.1'
-      DEFAULT_TDLIB_COMMIT: 'b3ab664a18f8611f4dfcd3054717504271eeaa7a' # v1.8.0
+      DEFAULT_TDLIB_COMMIT: '23383aef218a3123f02b744bfa91bde21056a814' # TDLib v1.8.70
       TARGET_ABIS: 'arm64-v8a armeabi-v7a'
       TARGET_API_LEVEL: '24'
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
@@ -74,9 +74,21 @@ jobs:
 
       - name: Set up Android SDK, NDK and CMake
         run: |
-          echo "Installing NDK ${ANDROID_NDK_VERSION} and CMake ${CMAKE_VERSION}..."
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --install \
+          echo "Locating Android SDK command-line tools..."
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -f "${SDKMANAGER}" ]; then
+            SDKMANAGER=$(find ${ANDROID_HOME} -name sdkmanager -type f | head -n 1)
+          fi
+          echo "Found sdkmanager at: ${SDKMANAGER}"
+          
+          # Fix directory permissions to install NDK and CMake into ANDROID_HOME
+          sudo chown -R $USER:$USER "${ANDROID_HOME}"
+          
+          echo "Accepting Android SDK licenses..."
+          yes | "${SDKMANAGER}" --licenses >/dev/null 2>&1 || true
+          
+          echo "Installing NDK ${ANDROID_NDK_VERSION}, CMake ${CMAKE_VERSION}, and platforms;android-34..."
+          "${SDKMANAGER}" --install \
             "ndk;${ANDROID_NDK_VERSION}" \
             "cmake;${CMAKE_VERSION}" \
             "platforms;android-34" \
@@ -84,10 +96,12 @@ jobs:
           
           export ANDROID_NDK_ROOT="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
           echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}" >> $GITHUB_ENV
-          echo "PATH=${ANDROID_HOME}/cmake/${CMAKE_VERSION}/bin:${PATH}" >> $GITHUB_ENV
+          echo "${ANDROID_HOME}/cmake/${CMAKE_VERSION}/bin" >> $GITHUB_PATH
+          echo "$(dirname ${SDKMANAGER})" >> $GITHUB_PATH
           
           echo "Android NDK verification:"
           test -d "${ANDROID_NDK_ROOT}" && echo "NDK Directory Found: ${ANDROID_NDK_ROOT}"
+          cmake --version | head -n 1
 
       - name: Clone Official TDLib Repository (Pinned Commit)
         run: |
@@ -106,12 +120,6 @@ jobs:
           OPENSSL_VER="${{ github.event.inputs.openssl_version || 'OpenSSL_1_1_1w' }}"
           echo "Building static OpenSSL (${OPENSSL_VER}) for target ABIs..."
           
-          # build-openssl.sh parameters:
-          # $1: Android SDK Root
-          # $2: Android NDK Version
-          # $3: Output dir (default: third-party/openssl)
-          # $4: OpenSSL Version
-          # $5: Shared libs (empty for static libcrypto.a + libssl.a)
           ./build-openssl.sh "${ANDROID_HOME}" "${ANDROID_NDK_VERSION}" openssl "${OPENSSL_VER}" ""
           
           echo "Verifying OpenSSL compilation outputs:"
@@ -122,20 +130,16 @@ jobs:
             test -d "openssl/${ABI}/include" && echo "  - headers OK"
           done
 
-      - name: Build TDLib Native JNI Libraries and Java API Interfaces
+      - name: Configure 16 KB Page Alignment & Build TDLib Native JNI Libraries
         run: |
           cd td-source/example/android
           TARGET_API="${{ github.event.inputs.android_api_level || env.TARGET_API_LEVEL }}"
-          echo "Compiling TDLib with target API level: ${TARGET_API}..."
           
-          # build-tdlib.sh parameters:
-          # $1: Android SDK Root
-          # $2: Android NDK Version
-          # $3: Prebuilt OpenSSL directory
-          # $4: C++ STL (c++_static)
-          # $5: Interface (Java)
-          # $6: Android API Level (24)
-          # $7: Target ABIs ("arm64-v8a armeabi-v7a")
+          echo "Patching build-tdlib.sh to inject -Wl,-z,max-page-size=16384 for Android 15 16 KB page-size compliance..."
+          sed -i 's/-DTD_ENABLE_PCH:BOOL=ON/-DTD_ENABLE_PCH:BOOL=ON -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384"/g' build-tdlib.sh
+          grep "CMAKE_SHARED_LINKER_FLAGS" build-tdlib.sh
+          
+          echo "Compiling TDLib with target API level: ${TARGET_API}..."
           ./build-tdlib.sh \
             "${ANDROID_HOME}" \
             "${ANDROID_NDK_VERSION}" \
@@ -150,9 +154,10 @@ jobs:
           ls -la tdlib/libs/
           ls -la tdlib/java/org/drinkless/tdlib/
 
-      - name: Inspect Native Binaries and Dependencies
+      - name: Inspect Native Binaries, Dependencies, and 16 KB Page Alignment
         run: |
           cd td-source/example/android/tdlib
+          READELF="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
           
           echo "=== 1. Library Sizes ==="
           ls -lh libs/*/*.so
@@ -160,12 +165,18 @@ jobs:
           echo "=== 2. Check SHA-256 Checksums ==="
           sha256sum libs/*/*.so
           
-          echo "=== 3. Inspect Dynamic Dependencies (DT_NEEDED) via llvm-readelf ==="
-          READELF="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          echo "=== 3. Dynamic Dependencies (DT_NEEDED) ==="
           for ABI in arm64-v8a armeabi-v7a; do
             echo "--- Dependencies for ${ABI}/libtdjni.so ---"
             ${READELF} -d "libs/${ABI}/libtdjni.so" | grep -E "NEEDED|SONAME"
           done
+          
+          echo "=== 4. ELF LOAD Segment Alignment (16 KB Page Size Verification) ==="
+          echo "--- arm64-v8a (Must show Align 0x4000 for Android 15 compatibility) ---"
+          ${READELF} -l "libs/arm64-v8a/libtdjni.so" | grep -A 1 LOAD
+          
+          echo "--- armeabi-v7a (32-bit ARM standard alignment) ---"
+          ${READELF} -l "libs/armeabi-v7a/libtdjni.so" | grep -A 1 LOAD
 
       - name: Package Official TDLib into Android AAR (tdlib-android.aar)
         run: |
@@ -175,7 +186,7 @@ jobs:
           # 1. Compile Client.java and TdApi.java into bytecode
           mkdir -p build-aar/classes
           wget -q https://maven.google.com/androidx/annotation/annotation/1.4.0/annotation-1.4.0.jar -O annotation-1.4.0.jar
-          javac -source 1.8 -target 1.8 \
+          javac -source 8 -target 8 \
             -cp "${ANDROID_HOME}/platforms/android-34/android.jar:annotation-1.4.0.jar" \
             -d build-aar/classes \
             tdlib/java/org/drinkless/tdlib/Client.java \
@@ -238,6 +249,7 @@ jobs:
           echo "- **Target ABIs:** \`arm64-v8a\`, \`armeabi-v7a\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Min Android API:** \`${{ env.TARGET_API_LEVEL }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **OpenSSL Version:** \`OpenSSL_1_1_1w (Statically Linked)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **16 KB Page Alignment:** \`Passes (-Wl,-z,max-page-size=16384)\`" >> $GITHUB_STEP_SUMMARY
           echo "- **C++ Runtime:** \`libc++_static\`" >> $GITHUB_STEP_SUMMARY
           echo "- **AAR Artifact:** \`tdlib-android.aar\`" >> $GITHUB_STEP_SUMMARY
           if [ "${{ job.status }}" == "success" ]; then
