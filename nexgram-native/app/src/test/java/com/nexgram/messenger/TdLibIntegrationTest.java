@@ -309,4 +309,59 @@ public class TdLibIntegrationTest {
         msg.content = new TdApi.MessageVoiceNote();
         assertEquals("🎤 Voice message", com.nexgram.messenger.ui.helpers.TelegramMessageFormatter.formatMessagePreview(msg));
     }
+
+    @Test
+    public void testTdLibProxyClassesAndFunctions() {
+        // 1. SOCKS5 Proxy Type Constructor
+        TdApi.ProxyTypeSocks5 socksType = new TdApi.ProxyTypeSocks5("tg_user", "tg_pass_123");
+        assertEquals(TdApi.ProxyTypeSocks5.CONSTRUCTOR, socksType.getConstructor());
+        assertEquals("tg_user", socksType.username);
+        assertEquals("tg_pass_123", socksType.password);
+
+        // 2. MTProto Proxy Type Constructor
+        TdApi.ProxyTypeMtproto mtType = new TdApi.ProxyTypeMtproto("secret_key_hex_123456789");
+        assertEquals(TdApi.ProxyTypeMtproto.CONSTRUCTOR, mtType.getConstructor());
+        assertEquals("secret_key_hex_123456789", mtType.secret);
+
+        // 3. TdApi.Proxy Constructor
+        TdApi.Proxy proxy = new TdApi.Proxy("198.51.100.1", 1080, socksType);
+        assertEquals(TdApi.Proxy.CONSTRUCTOR, proxy.getConstructor());
+        assertEquals("198.51.100.1", proxy.server);
+        assertEquals(1080, proxy.port);
+        assertEquals(socksType, proxy.type);
+
+        // 4. AddProxy Function
+        TdApi.AddProxy addProxy = new TdApi.AddProxy(proxy, true, "NexGram-Test");
+        assertEquals(TdApi.AddProxy.CONSTRUCTOR, addProxy.getConstructor());
+        assertEquals(proxy, addProxy.proxy);
+        assertTrue(addProxy.enable);
+        assertEquals("NexGram-Test", addProxy.comment);
+
+        // 5. EnableProxy Function
+        TdApi.EnableProxy enableProxy = new TdApi.EnableProxy(42);
+        assertEquals(TdApi.EnableProxy.CONSTRUCTOR, enableProxy.getConstructor());
+        assertEquals(42, enableProxy.proxyId);
+
+        // 6. DisableProxy Function (Direct Connection)
+        TdApi.DisableProxy disableProxy = new TdApi.DisableProxy();
+        assertEquals(TdApi.DisableProxy.CONSTRUCTOR, disableProxy.getConstructor());
+
+        // 7. RemoveProxy Function
+        TdApi.RemoveProxy removeProxy = new TdApi.RemoveProxy(42);
+        assertEquals(TdApi.RemoveProxy.CONSTRUCTOR, removeProxy.getConstructor());
+        assertEquals(42, removeProxy.proxyId);
+
+        // 8. PingProxy Function
+        TdApi.PingProxy pingProxy = new TdApi.PingProxy(proxy);
+        assertEquals(TdApi.PingProxy.CONSTRUCTOR, pingProxy.getConstructor());
+        assertEquals(proxy, pingProxy.proxy);
+
+        // 9. GetProxies Function
+        TdApi.GetProxies getProxies = new TdApi.GetProxies();
+        assertEquals(TdApi.GetProxies.CONSTRUCTOR, getProxies.getConstructor());
+
+        // 10. ConnectionStateConnectingToProxy
+        TdApi.ConnectionStateConnectingToProxy connToProxy = new TdApi.ConnectionStateConnectingToProxy();
+        assertEquals(TdApi.ConnectionStateConnectingToProxy.CONSTRUCTOR, connToProxy.getConstructor());
+    }
 }

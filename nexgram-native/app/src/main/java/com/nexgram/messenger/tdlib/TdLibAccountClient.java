@@ -83,6 +83,9 @@ public class TdLibAccountClient {
         Client.ResultHandler updateHandler = object -> {
             if (object instanceof TdApi.UpdateAuthorizationState) {
                 handleAuthStateUpdate(((TdApi.UpdateAuthorizationState) object).authorizationState);
+            } else if (object instanceof TdApi.UpdateConnectionState) {
+                TdApi.ConnectionState state = ((TdApi.UpdateConnectionState) object).state;
+                Log.i(TAG, "Account " + accountId + " ConnectionState: " + state.getClass().getSimpleName());
             }
             for (RawUpdateListener listener : rawUpdateListeners) {
                 try {
@@ -166,6 +169,11 @@ public class TdLibAccountClient {
                 notifyError(error.code, error.message);
             } else {
                 Log.i(TAG, "TDLib parameters accepted for account " + accountId + ". Database encrypted with Keystore key.");
+                // Apply saved account-specific proxy (if configured)
+                com.nexgram.messenger.NexGramApplication app = com.nexgram.messenger.NexGramApplication.getInstance();
+                if (app != null && app.getProxyController() != null) {
+                    applySavedProxy(app.getProxyController(), null);
+                }
             }
         });
     }
@@ -368,5 +376,77 @@ public class TdLibAccountClient {
      */
     public void downloadFile(int fileId, int priority, Client.ResultHandler handler) {
         send(new TdApi.DownloadFile(fileId, priority, 0, 0, false), handler);
+    }
+
+    /**
+     * Applies the configured proxy from ProxyController for this account, or disables proxy if none/disabled.
+     */
+    public void applySavedProxy(com.nexgram.messenger.proxy.ProxyController proxyController, Client.ResultHandler handler) {
+        if (proxyController == null) {
+            if (handler != null) handler.onResult(new TdApi.Ok());
+            return;
+        }
+        com.nexgram.messenger.proxy.ProxyController.ProxyMetadata meta = proxyController.getProxyMetadata(accountId);
+        if (meta != null && meta.enabled && meta.type != com.nexgram.messenger.proxy.ProxyController.ProxyType.DIRECT) {
+            String secret = proxyController.getProxySecret(accountId);
+            TdApi.Proxy tdProxy = com.nexgram.messenger.proxy.ProxyController.buildTdApiProxy(meta, secret);
+            setProxy(tdProxy, handler);
+        } else {
+            disableProxy(handler);
+        }
+    }
+
+    /**
+     * Sets or switches the proxy for this account client via TDLib AddProxy(enable=true).
+     * If proxy is null, disables proxy (direct connection).
+     * Note: Changing proxies on an authorized client DOES NOT disconnect the session or require OTP.
+     */
+    public void setProxy(TdApi.Proxy proxy, Client.ResultHandler handler) {
+        if (proxy == null) {
+            disableProxy(handler);
+            return;
+        }
+        send(new TdApi.AddProxy(proxy, true, "NexGram-" + accountId), result -> {
+            if (result instanceof TdApi.AddedProxy) {
+                TdApi.AddedProxy added = (TdApi.AddedProxy) result;
+                Log.i(TAG, "Account " + accountId + ": TDLib Proxy added and enabled with ID: " + added.id);
+            } else if (result instanceof TdApi.Error) {
+                Log.e(TAG, "Account " + accountId + ": TDLib AddProxy failed: " + ((TdApi.Error) result).message);
+            }
+            if (handler != null) {
+                handler.onResult(result);
+            }
+        });
+    }
+
+    /**
+     * Disables any active proxy and reverts this client to Direct Connection.
+     */
+    public void disableProxy(Client.ResultHandler handler) {
+        send(new TdApi.DisableProxy(), result -> {
+            Log.i(TAG, "Account " + accountId + ": TDLib Proxy disabled. Direct connection active.");
+            if (handler != null) {
+                handler.onResult(result);
+            }
+        });
+    }
+
+    /**
+     * Pings a proxy configuration using TDLib's native network stack.
+     * Returns TdApi.Seconds (latency) or TdApi.Error.
+     */
+    public void pingProxy(TdApi.Proxy proxy, Client.ResultHandler handler) {
+        if (proxy == null) {
+            if (handler != null) handler.onResult(new TdApi.Error(400, "Proxy cannot be null"));
+            return;
+        }
+        send(new TdApi.PingProxy(proxy), handler);
+    }
+
+    /**
+     * Queries all added proxies for this account client.
+     */
+    public void getProxies(Client.ResultHandler handler) {
+        send(new TdApi.GetProxies(), handler);
     }
 }

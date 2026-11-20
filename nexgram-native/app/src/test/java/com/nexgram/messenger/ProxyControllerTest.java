@@ -145,4 +145,134 @@ public class ProxyControllerTest {
         assertNotNull(res.note);
         assertFalse(res.note.isEmpty());
     }
+
+    @Test
+    public void testBuildTdApiProxySocks5AndMtproto() {
+        // SOCKS5 test
+        ProxyController.ProxyMetadata socksMeta = new ProxyController.ProxyMetadata();
+        socksMeta.host = "de.proxy.telegram.org";
+        socksMeta.port = 1080;
+        socksMeta.username = "germany_user";
+        socksMeta.type = ProxyController.ProxyType.SOCKS5;
+        socksMeta.enabled = true;
+
+        org.drinkless.tdlib.TdApi.Proxy socksProxy = ProxyController.buildTdApiProxy(socksMeta, "socks_pwd_123");
+        assertNotNull(socksProxy);
+        assertEquals("de.proxy.telegram.org", socksProxy.server);
+        assertEquals(1080, socksProxy.port);
+        assertTrue(socksProxy.type instanceof org.drinkless.tdlib.TdApi.ProxyTypeSocks5);
+        org.drinkless.tdlib.TdApi.ProxyTypeSocks5 socksType = (org.drinkless.tdlib.TdApi.ProxyTypeSocks5) socksProxy.type;
+        assertEquals("germany_user", socksType.username);
+        assertEquals("socks_pwd_123", socksType.password);
+
+        // MTProto test
+        ProxyController.ProxyMetadata mtMeta = new ProxyController.ProxyMetadata();
+        mtMeta.host = "us.proxy.telegram.org";
+        mtMeta.port = 443;
+        mtMeta.type = ProxyController.ProxyType.MTPROTO;
+        mtMeta.enabled = true;
+
+        org.drinkless.tdlib.TdApi.Proxy mtProxy = ProxyController.buildTdApiProxy(mtMeta, "ee112233445566778899aabbccddeeff");
+        assertNotNull(mtProxy);
+        assertEquals("us.proxy.telegram.org", mtProxy.server);
+        assertEquals(443, mtProxy.port);
+        assertTrue(mtProxy.type instanceof org.drinkless.tdlib.TdApi.ProxyTypeMtproto);
+        org.drinkless.tdlib.TdApi.ProxyTypeMtproto mtType = (org.drinkless.tdlib.TdApi.ProxyTypeMtproto) mtProxy.type;
+        assertEquals("ee112233445566778899aabbccddeeff", mtType.secret);
+    }
+
+    @Test
+    public void testGermanyToUsaProxySwitchingWithoutSessionLoss() {
+        String accountId = "account_switcher";
+
+        // 1. Establish persistent Telegram session key in Vault
+        vault.saveSession(accountId, "telegram_auth_session_key_persistent_xyz");
+        byte[] dbKey = vault.getOrCreateDatabaseKey(accountId);
+        assertNotNull(dbKey);
+        assertEquals("telegram_auth_session_key_persistent_xyz", vault.getSession(accountId));
+
+        // 2. Configure Germany SOCKS5 proxy
+        ProxyController.ProxyMetadata germanyMeta = new ProxyController.ProxyMetadata();
+        germanyMeta.host = "198.51.100.1";
+        germanyMeta.port = 1080;
+        germanyMeta.username = "de_user";
+        germanyMeta.type = ProxyController.ProxyType.SOCKS5;
+        germanyMeta.enabled = true;
+        germanyMeta.label = "Germany SOCKS5";
+        controller.saveProxy(accountId, germanyMeta, "pwd_germany");
+
+        org.drinkless.tdlib.TdApi.Proxy proxy1 = controller.getTdApiProxy(accountId);
+        assertNotNull(proxy1);
+        assertEquals("198.51.100.1", proxy1.server);
+        assertEquals(1080, proxy1.port);
+        assertTrue(proxy1.type instanceof org.drinkless.tdlib.TdApi.ProxyTypeSocks5);
+
+        // 3. Switch to USA MTProto proxy without dropping session
+        ProxyController.ProxyMetadata usaMeta = new ProxyController.ProxyMetadata();
+        usaMeta.host = "198.51.100.2";
+        usaMeta.port = 443;
+        usaMeta.type = ProxyController.ProxyType.MTPROTO;
+        usaMeta.enabled = true;
+        usaMeta.label = "USA MTProto";
+        controller.saveProxy(accountId, usaMeta, "secret_usa_hex_998877");
+
+        org.drinkless.tdlib.TdApi.Proxy proxy2 = controller.getTdApiProxy(accountId);
+        assertNotNull(proxy2);
+        assertEquals("198.51.100.2", proxy2.server);
+        assertEquals(443, proxy2.port);
+        assertTrue(proxy2.type instanceof org.drinkless.tdlib.TdApi.ProxyTypeMtproto);
+
+        // 4. CRITICAL INVARIANT: Telegram session key in Vault remains 100% intact (zero session loss, no OTP required)
+        assertEquals("telegram_auth_session_key_persistent_xyz", vault.getSession(accountId));
+        org.junit.Assert.assertArrayEquals(dbKey, vault.getOrCreateDatabaseKey(accountId));
+    }
+
+    @Test
+    public void testMultiAccountProxyIsolationAccount1AndAccount2() {
+        String account1 = "account_1_germany";
+        String account2 = "account_2_usa";
+
+        // Setup Account 1: Germany SOCKS5
+        ProxyController.ProxyMetadata meta1 = new ProxyController.ProxyMetadata();
+        meta1.host = "germany.tgproxy.org";
+        meta1.port = 1080;
+        meta1.username = "user_de";
+        meta1.type = ProxyController.ProxyType.SOCKS5;
+        meta1.enabled = true;
+        controller.saveProxy(account1, meta1, "de_secret_123");
+
+        // Setup Account 2: USA MTProto
+        ProxyController.ProxyMetadata meta2 = new ProxyController.ProxyMetadata();
+        meta2.host = "usa.tgproxy.org";
+        meta2.port = 8443;
+        meta2.type = ProxyController.ProxyType.MTPROTO;
+        meta2.enabled = true;
+        controller.saveProxy(account2, meta2, "us_secret_hex_456");
+
+        // Verify both accounts have their own distinct proxies
+        org.drinkless.tdlib.TdApi.Proxy proxy1 = controller.getTdApiProxy(account1);
+        org.drinkless.tdlib.TdApi.Proxy proxy2 = controller.getTdApiProxy(account2);
+        assertNotNull(proxy1);
+        assertNotNull(proxy2);
+        assertEquals("germany.tgproxy.org", proxy1.server);
+        assertEquals("usa.tgproxy.org", proxy2.server);
+        assertTrue(proxy1.type instanceof org.drinkless.tdlib.TdApi.ProxyTypeSocks5);
+        assertTrue(proxy2.type instanceof org.drinkless.tdlib.TdApi.ProxyTypeMtproto);
+
+        // Now modify Account 1 to Direct connection
+        controller.saveDirectConnection(account1);
+
+        // Account 1 MUST be direct (no proxy)
+        assertNull(controller.getTdApiProxy(account1));
+        assertNull(controller.getProxySecret(account1));
+        assertFalse(controller.getProxyMetadata(account1).enabled);
+
+        // Account 2 MUST remain completely unaffected (USA MTProto still active and intact)
+        org.drinkless.tdlib.TdApi.Proxy unaffectedProxy2 = controller.getTdApiProxy(account2);
+        assertNotNull(unaffectedProxy2);
+        assertEquals("usa.tgproxy.org", unaffectedProxy2.server);
+        assertEquals(8443, unaffectedProxy2.port);
+        assertEquals("us_secret_hex_456", controller.getProxySecret(account2));
+        assertTrue(controller.getProxyMetadata(account2).enabled);
+    }
 }

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -9,7 +10,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Proxy Type"
+        android:text="Connection Routing Mode"
         android:textColor="@color/text_secondary"
         android:textSize="12sp"
         android:layout_marginBottom="4dp" />
@@ -22,13 +23,21 @@
         android:layout_marginBottom="12dp">
 
         <RadioButton
+            android:id="@+id/rbDirect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Direct"
+            android:textColor="@color/text_primary"
+            android:layout_marginEnd="12dp" />
+
+        <RadioButton
             android:id="@+id/rbSocks5"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="SOCKS5"
             android:textColor="@color/text_primary"
             android:checked="true"
-            android:layout_marginEnd="16dp" />
+            android:layout_marginEnd="12dp" />
 
         <RadioButton
             android:id="@+id/rbMtproto"
@@ -38,51 +47,115 @@
             android:textColor="@color/text_primary" />
     </RadioGroup>
 
-    <com.google.android.material.textfield.TextInputLayout
+    <!-- Proxy Fields Container (Hidden when Direct is selected) -->
+    <LinearLayout
+        android:id="@+id/layoutProxyFields"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Host Address (IP or domain)"
-        android:layout_marginBottom="8dp">
+        android:orientation="vertical">
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/etProxyHost"
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilProxyHost"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="textUri"
-            android:textColor="@color/text_primary" />
-    </com.google.android.material.textfield.TextInputLayout>
+            android:hint="Host Address (IP or domain)"
+            android:layout_marginBottom="8dp">
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Port (1 - 65535)"
-        android:layout_marginBottom="8dp">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etProxyHost"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textUri"
+                android:textColor="@color/text_primary" />
+        </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/etProxyPort"
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilProxyPort"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="number"
-            android:textColor="@color/text_primary" />
-    </com.google.android.material.textfield.TextInputLayout>
+            android:hint="Port (1 - 65535)"
+            android:layout_marginBottom="8dp">
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Password or MTProto Secret (Optional)">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etProxyPort"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="@color/text_primary" />
+        </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/etProxySecret"
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilProxyUsername"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="textPassword"
-            android:textColor="@color/text_primary" />
-    </com.google.android.material.textfield.TextInputLayout>
+            android:hint="Username (Optional)"
+            android:layout_marginBottom="8dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etProxyUsername"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:textColor="@color/text_primary" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilProxySecret"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Password or MTProto Secret (Optional)"
+            android:layout_marginBottom="8dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etProxySecret"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textPassword"
+                android:textColor="@color/text_primary" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Test Connection Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp">
+
+            <Button
+                android:id="@+id/btnTestPing"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Test Ping"
+                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/bg_dark_secondary"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+            <ProgressBar
+                android:id="@+id/pbTestingProxy"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginStart="8dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvPingResult"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+    </LinearLayout>
 
     <TextView
+        android:id="@+id/tvSecurityNote"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Credentials are encrypted in the Android Keystore. Localhost (127.0.0.1) is blocked."
+        android:text="Encrypted in hardware Keystore. Independent per account. Localhost (127.0.0.1) is blocked."
         android:textColor="@color/text_muted"
         android:textSize="11sp"
         android:layout_marginTop="8dp" />

@@ -5,6 +5,8 @@ import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
@@ -13,15 +15,20 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.cardview.widget.CardView;
+import com.google.android.material.textfield.TextInputLayout;
 import com.nexgram.messenger.NexGramApplication;
 import com.nexgram.messenger.R;
 import com.nexgram.messenger.auth.AccountManager;
+import com.nexgram.messenger.proxy.ProxyController;
 import com.nexgram.messenger.tdlib.TdLibAccountClient;
 import com.nexgram.messenger.tdlib.TdLibManager;
 import java.util.ArrayList;
@@ -466,11 +473,189 @@ public class AuthActivity extends AppCompatActivity {
     }
 
     @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        menu.add(0, 101, 0, "Proxy")
+                .setIcon(R.drawable.ic_shield_proxy)
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        return true;
+    }
+
+    @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == android.R.id.home) {
             finish();
             return true;
+        } else if (item.getItemId() == 101) {
+            showProxyConfigurationDialog();
+            return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    private void showProxyConfigurationDialog() {
+        ProxyController proxy = NexGramApplication.getInstance().getProxyController();
+        ProxyController.ProxyMetadata current = proxy != null ? proxy.getProxyMetadata(ACCOUNT_ID) : null;
+        String currentSecret = proxy != null ? proxy.getProxySecret(ACCOUNT_ID) : "";
+
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_proxy_config, null);
+        RadioGroup rgType = dialogView.findViewById(R.id.rgProxyType);
+        RadioButton rbDirect = dialogView.findViewById(R.id.rbDirect);
+        RadioButton rbSocks5 = dialogView.findViewById(R.id.rbSocks5);
+        RadioButton rbMtproto = dialogView.findViewById(R.id.rbMtproto);
+
+        View layoutFields = dialogView.findViewById(R.id.layoutProxyFields);
+        TextInputLayout tilHost = dialogView.findViewById(R.id.tilProxyHost);
+        EditText etHost = dialogView.findViewById(R.id.etProxyHost);
+        TextInputLayout tilPort = dialogView.findViewById(R.id.tilProxyPort);
+        EditText etPort = dialogView.findViewById(R.id.etProxyPort);
+        TextInputLayout tilUsername = dialogView.findViewById(R.id.tilProxyUsername);
+        EditText etUsername = dialogView.findViewById(R.id.etProxyUsername);
+        TextInputLayout tilSecret = dialogView.findViewById(R.id.tilProxySecret);
+        EditText etSecret = dialogView.findViewById(R.id.etProxySecret);
+
+        Button btnTestPing = dialogView.findViewById(R.id.btnTestPing);
+        ProgressBar pbTesting = dialogView.findViewById(R.id.pbTestingProxy);
+        TextView tvPingResult = dialogView.findViewById(R.id.tvPingResult);
+
+        if (current == null || !current.enabled || current.type == ProxyController.ProxyType.DIRECT) {
+            rbDirect.setChecked(true);
+            layoutFields.setVisibility(View.GONE);
+        } else {
+            if (current.type == ProxyController.ProxyType.MTPROTO) {
+                rbMtproto.setChecked(true);
+                tilUsername.setVisibility(View.GONE);
+                tilSecret.setHint("MTProto Secret Key (Hex)");
+            } else {
+                rbSocks5.setChecked(true);
+                tilUsername.setVisibility(View.VISIBLE);
+                tilSecret.setHint("Password (Optional)");
+            }
+            layoutFields.setVisibility(View.VISIBLE);
+            if (current.host != null) etHost.setText(current.host);
+            if (current.port > 0) etPort.setText(String.valueOf(current.port));
+            if (current.username != null) etUsername.setText(current.username);
+            if (currentSecret != null) etSecret.setText(currentSecret);
+        }
+
+        rgType.setOnCheckedChangeListener((group, checkedId) -> {
+            if (checkedId == R.id.rbDirect) {
+                layoutFields.setVisibility(View.GONE);
+            } else if (checkedId == R.id.rbMtproto) {
+                layoutFields.setVisibility(View.VISIBLE);
+                tilUsername.setVisibility(View.GONE);
+                tilSecret.setHint("MTProto Secret Key (Hex)");
+            } else {
+                layoutFields.setVisibility(View.VISIBLE);
+                tilUsername.setVisibility(View.VISIBLE);
+                tilSecret.setHint("Password (Optional)");
+            }
+            tvPingResult.setText("");
+        });
+
+        btnTestPing.setOnClickListener(v -> {
+            String host = etHost.getText().toString().trim();
+            String portStr = etPort.getText().toString().trim();
+            String user = etUsername.getText().toString().trim();
+            String secret = etSecret.getText().toString().trim();
+            int port;
+            try {
+                port = Integer.parseInt(portStr);
+                ProxyController.validate(host, port);
+            } catch (Exception e) {
+                tvPingResult.setText(e.getMessage());
+                tvPingResult.setTextColor(0xFFE53935);
+                return;
+            }
+
+            ProxyController.ProxyMetadata testMeta = new ProxyController.ProxyMetadata();
+            testMeta.host = host;
+            testMeta.port = port;
+            testMeta.username = user;
+            testMeta.enabled = true;
+            testMeta.type = rbMtproto.isChecked() ? ProxyController.ProxyType.MTPROTO : ProxyController.ProxyType.SOCKS5;
+
+            TdApi.Proxy tdProxy = ProxyController.buildTdApiProxy(testMeta, secret);
+
+            pbTesting.setVisibility(View.VISIBLE);
+            tvPingResult.setText("Pinging through TDLib engine...");
+            tvPingResult.setTextColor(0xFF7F91A4);
+
+            if (client != null && tdProxy != null) {
+                client.pingProxy(tdProxy, result -> {
+                    runOnUiThread(() -> {
+                        pbTesting.setVisibility(View.GONE);
+                        if (result instanceof TdApi.Seconds) {
+                            long ms = (long) (((TdApi.Seconds) result).seconds * 1000.0);
+                            tvPingResult.setText("Success! Latency: " + ms + " ms");
+                            tvPingResult.setTextColor(0xFF00C853);
+                        } else if (result instanceof TdApi.Error) {
+                            tvPingResult.setText("Ping failed: " + ((TdApi.Error) result).message);
+                            tvPingResult.setTextColor(0xFFE53935);
+                        }
+                    });
+                });
+            } else if (proxy != null) {
+                new Thread(() -> {
+                    ProxyController.ReachabilityResult res = proxy.testReachability(host, port, 4000);
+                    runOnUiThread(() -> {
+                        pbTesting.setVisibility(View.GONE);
+                        if (res.status == ProxyController.ReachabilityStatus.TCP_REACHABLE) {
+                            tvPingResult.setText("TCP Reachable (" + res.latencyMs + " ms)");
+                            tvPingResult.setTextColor(0xFF00C853);
+                        } else {
+                            tvPingResult.setText(res.note);
+                            tvPingResult.setTextColor(0xFFE53935);
+                        }
+                    });
+                }).start();
+            }
+        });
+
+        new AlertDialog.Builder(this)
+                .setTitle("Pre-Login Proxy Configuration")
+                .setView(dialogView)
+                .setPositiveButton("Save & Connect", (dialog, which) -> {
+                    if (proxy == null) return;
+                    if (rbDirect.isChecked()) {
+                        proxy.saveDirectConnection(ACCOUNT_ID);
+                        if (client != null) {
+                            client.disableProxy(null);
+                        }
+                        Toast.makeText(this, "Direct connection (No Proxy)", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    String host = etHost.getText().toString().trim();
+                    String portStr = etPort.getText().toString().trim();
+                    String user = etUsername.getText().toString().trim();
+                    String secret = etSecret.getText().toString().trim();
+                    int port;
+                    try {
+                        port = Integer.parseInt(portStr);
+                        ProxyController.validate(host, port);
+                    } catch (Exception e) {
+                        Toast.makeText(this, "Validation error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        return;
+                    }
+
+                    ProxyController.ProxyMetadata meta = new ProxyController.ProxyMetadata();
+                    meta.host = host;
+                    meta.port = port;
+                    meta.username = user;
+                    meta.enabled = true;
+                    meta.type = rbMtproto.isChecked() ? ProxyController.ProxyType.MTPROTO : ProxyController.ProxyType.SOCKS5;
+
+                    proxy.saveProxy(ACCOUNT_ID, meta, secret);
+
+                    if (client != null) {
+                        TdApi.Proxy tdProxy = ProxyController.buildTdApiProxy(meta, secret);
+                        client.setProxy(tdProxy, res -> {
+                            Log.i(TAG, "Pre-login proxy applied via TDLib: " + res);
+                        });
+                        Toast.makeText(this, "Proxy enabled for Telegram login via TDLib", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 }
