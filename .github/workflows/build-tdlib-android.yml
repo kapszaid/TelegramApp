@@ -1,0 +1,247 @@
+name: Build Official TDLib Android Native Libraries
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-tdlib-android.yml'
+  workflow_dispatch:
+    inputs:
+      tdlib_commit:
+        description: 'TDLib Git Commit or Tag to build'
+        required: true
+        default: 'b3ab664a18f8611f4dfcd3054717504271eeaa7a' # Official TDLib v1.8.0 Release Tag
+      android_api_level:
+        description: 'Target Minimum Android API Level'
+        required: true
+        default: '24'
+      openssl_version:
+        description: 'OpenSSL Version'
+        required: true
+        default: 'OpenSSL_1_1_1w'
+
+jobs:
+  build-tdlib:
+    name: Cross-Compile TDLib for Android (arm64-v8a & armeabi-v7a)
+    runs-on: ubuntu-24.04
+
+    env:
+      ANDROID_NDK_VERSION: '23.2.8568313'
+      CMAKE_VERSION: '3.22.1'
+      DEFAULT_TDLIB_COMMIT: 'b3ab664a18f8611f4dfcd3054717504271eeaa7a' # v1.8.0
+      TARGET_ABIS: 'arm64-v8a armeabi-v7a'
+      TARGET_API_LEVEL: '24'
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
+
+    steps:
+      - name: Checkout NexGram Repository
+        uses: actions/checkout@v4
+
+      - name: Inspect Runner Hardware & System Environment
+        run: |
+          echo "=== CPU Info ==="
+          lscpu | grep -E "Model name|CPU\(s\):|Thread\(s\) per core"
+          echo "=== Memory Info ==="
+          free -h
+          echo "=== Storage Info ==="
+          df -h /
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Host Build Prerequisites
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            gperf \
+            php-cli \
+            perl \
+            make \
+            ninja-build \
+            cmake \
+            g++ \
+            zlib1g-dev \
+            zip \
+            unzip \
+            wget \
+            git
+          php -v
+          gperf --version | head -n 1
+          ninja --version
+          cmake --version | head -n 1
+
+      - name: Set up Android SDK, NDK and CMake
+        run: |
+          echo "Installing NDK ${ANDROID_NDK_VERSION} and CMake ${CMAKE_VERSION}..."
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${CMAKE_VERSION}" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+          
+          export ANDROID_NDK_ROOT="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
+          echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}" >> $GITHUB_ENV
+          echo "PATH=${ANDROID_HOME}/cmake/${CMAKE_VERSION}/bin:${PATH}" >> $GITHUB_ENV
+          
+          echo "Android NDK verification:"
+          test -d "${ANDROID_NDK_ROOT}" && echo "NDK Directory Found: ${ANDROID_NDK_ROOT}"
+
+      - name: Clone Official TDLib Repository (Pinned Commit)
+        run: |
+          TARGET_COMMIT="${{ github.event.inputs.tdlib_commit || env.DEFAULT_TDLIB_COMMIT }}"
+          echo "Cloning official tdlib/td repository at commit: ${TARGET_COMMIT}..."
+          git clone --filter=blob:none https://github.com/tdlib/td.git td-source
+          cd td-source
+          git checkout "${TARGET_COMMIT}"
+          ACTUAL_COMMIT=$(git rev-parse HEAD)
+          echo "Checked out TDLib commit: ${ACTUAL_COMMIT}"
+          echo "ACTUAL_TDLIB_COMMIT=${ACTUAL_COMMIT}" >> $GITHUB_ENV
+
+      - name: Cross-Compile OpenSSL for Android Target ABIs
+        run: |
+          cd td-source/example/android
+          OPENSSL_VER="${{ github.event.inputs.openssl_version || 'OpenSSL_1_1_1w' }}"
+          echo "Building static OpenSSL (${OPENSSL_VER}) for target ABIs..."
+          
+          # build-openssl.sh parameters:
+          # $1: Android SDK Root
+          # $2: Android NDK Version
+          # $3: Output dir (default: third-party/openssl)
+          # $4: OpenSSL Version
+          # $5: Shared libs (empty for static libcrypto.a + libssl.a)
+          ./build-openssl.sh "${ANDROID_HOME}" "${ANDROID_NDK_VERSION}" openssl "${OPENSSL_VER}" ""
+          
+          echo "Verifying OpenSSL compilation outputs:"
+          for ABI in ${TARGET_ABIS}; do
+            echo "Checking ABI ${ABI}..."
+            test -f "openssl/${ABI}/lib/libcrypto.a" && echo "  - libcrypto.a OK"
+            test -f "openssl/${ABI}/lib/libssl.a" && echo "  - libssl.a OK"
+            test -d "openssl/${ABI}/include" && echo "  - headers OK"
+          done
+
+      - name: Build TDLib Native JNI Libraries and Java API Interfaces
+        run: |
+          cd td-source/example/android
+          TARGET_API="${{ github.event.inputs.android_api_level || env.TARGET_API_LEVEL }}"
+          echo "Compiling TDLib with target API level: ${TARGET_API}..."
+          
+          # build-tdlib.sh parameters:
+          # $1: Android SDK Root
+          # $2: Android NDK Version
+          # $3: Prebuilt OpenSSL directory
+          # $4: C++ STL (c++_static)
+          # $5: Interface (Java)
+          # $6: Android API Level (24)
+          # $7: Target ABIs ("arm64-v8a armeabi-v7a")
+          ./build-tdlib.sh \
+            "${ANDROID_HOME}" \
+            "${ANDROID_NDK_VERSION}" \
+            openssl \
+            "c++_static" \
+            "Java" \
+            "${TARGET_API}" \
+            "${TARGET_ABIS}"
+          
+          echo "Verifying TDLib build outputs:"
+          ls -la tdlib/
+          ls -la tdlib/libs/
+          ls -la tdlib/java/org/drinkless/tdlib/
+
+      - name: Inspect Native Binaries and Dependencies
+        run: |
+          cd td-source/example/android/tdlib
+          
+          echo "=== 1. Library Sizes ==="
+          ls -lh libs/*/*.so
+          
+          echo "=== 2. Check SHA-256 Checksums ==="
+          sha256sum libs/*/*.so
+          
+          echo "=== 3. Inspect Dynamic Dependencies (DT_NEEDED) via llvm-readelf ==="
+          READELF="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          for ABI in arm64-v8a armeabi-v7a; do
+            echo "--- Dependencies for ${ABI}/libtdjni.so ---"
+            ${READELF} -d "libs/${ABI}/libtdjni.so" | grep -E "NEEDED|SONAME"
+          done
+
+      - name: Package Official TDLib into Android AAR (tdlib-android.aar)
+        run: |
+          cd td-source/example/android
+          echo "Packaging tdlib-android.aar..."
+          
+          # 1. Compile Client.java and TdApi.java into bytecode
+          mkdir -p build-aar/classes
+          wget -q https://maven.google.com/androidx/annotation/annotation/1.4.0/annotation-1.4.0.jar -O annotation-1.4.0.jar
+          javac -source 1.8 -target 1.8 \
+            -cp "${ANDROID_HOME}/platforms/android-34/android.jar:annotation-1.4.0.jar" \
+            -d build-aar/classes \
+            tdlib/java/org/drinkless/tdlib/Client.java \
+            tdlib/java/org/drinkless/tdlib/TdApi.java
+          
+          jar -cf build-aar/classes.jar -C build-aar/classes .
+          
+          # 2. Construct AAR structure
+          mkdir -p aar-package/jni/arm64-v8a
+          mkdir -p aar-package/jni/armeabi-v7a
+          
+          cp build-aar/classes.jar aar-package/
+          cp tdlib/libs/arm64-v8a/libtdjni.so aar-package/jni/arm64-v8a/
+          cp tdlib/libs/armeabi-v7a/libtdjni.so aar-package/jni/armeabi-v7a/
+          cp ../../LICENSE_1_0.txt aar-package/LICENSE.txt
+          touch aar-package/R.txt
+          
+          cat << 'EOF' > aar-package/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="org.drinkless.tdlib">
+          </manifest>
+          EOF
+          
+          # 3. Create AAR archive
+          cd aar-package
+          zip -9 -r ../tdlib-android.aar .
+          cd ..
+          
+          echo "=== AAR Contents ==="
+          unzip -l tdlib-android.aar
+          ls -lh tdlib-android.aar
+          
+          # Copy to workspace output
+          mkdir -p ${GITHUB_WORKSPACE}/build-output
+          cp tdlib-android.aar ${GITHUB_WORKSPACE}/build-output/
+          
+          # Also package raw zip containing separate ABI libraries and Java sources
+          zip -9 -r ${GITHUB_WORKSPACE}/build-output/tdlib-android-raw.zip tdlib/libs tdlib/java
+
+      - name: Upload TDLib Android AAR Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tdlib-android-aar
+          path: build-output/tdlib-android.aar
+          retention-days: 30
+
+      - name: Upload TDLib Raw Libraries & Java Sources Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tdlib-android-raw
+          path: build-output/tdlib-android-raw.zip
+          retention-days: 30
+
+      - name: Build Summary & Status Report
+        if: always()
+        run: |
+          echo "### TDLib Android Native Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **TDLib Commit:** \`${{ env.ACTUAL_TDLIB_COMMIT }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target ABIs:** \`arm64-v8a\`, \`armeabi-v7a\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Min Android API:** \`${{ env.TARGET_API_LEVEL }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **OpenSSL Version:** \`OpenSSL_1_1_1w (Statically Linked)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **C++ Runtime:** \`libc++_static\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **AAR Artifact:** \`tdlib-android.aar\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "- **Status:** :white_check_mark: **SUCCESS**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status:** :x: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
