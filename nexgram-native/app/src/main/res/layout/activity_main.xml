@@ -44,10 +44,9 @@
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
-                android:text="Active Account"
-                android:textColor="@color/primary"
-                android:textStyle="bold"
-                android:textSize="14sp" />
+                android:text="No Account Connected"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
 
             <Button
                 android:id="@+id/btnSwitchAccount"
@@ -56,16 +55,63 @@
                 android:text="@string/btn_switch_account"
                 android:textSize="12sp"
                 style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:textColor="@color/primary" />
+                android:textColor="@color/primary"
+                android:visibility="gone" />
         </LinearLayout>
 
     </com.google.android.material.appbar.AppBarLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerViewChats"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <!-- Chat List View -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerViewChats"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+        <!-- Clean Empty State (Zero Fake Chats) -->
+        <LinearLayout
+            android:id="@+id/layoutEmptyState"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp"
+            android:visibility="visible">
+
+            <ImageView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@android:drawable/ic_dialog_info"
+                app:tint="@color/text_muted"
+                android:layout_marginBottom="16dp"
+                android:contentDescription="Empty state icon" />
+
+            <TextView
+                android:id="@+id/tvEmptyTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="No Account Connected"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/tvEmptySubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Log in with your Telegram account or manage proxies in Settings. Real-time messages will appear once native MTProto client integration is active."
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:gravity="center" />
+        </LinearLayout>
+
+    </FrameLayout>
 
     <!-- Floating Action Button for New Chat -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -76,6 +122,7 @@
         android:layout_margin="16dp"
         app:backgroundTint="@color/primary"
         app:tint="@color/text_primary"
-        android:contentDescription="New Chat" />
+        android:contentDescription="New Chat"
+        android:visibility="gone" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

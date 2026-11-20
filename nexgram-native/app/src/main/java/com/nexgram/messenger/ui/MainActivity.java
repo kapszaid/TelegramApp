@@ -25,6 +25,10 @@ import java.util.List;
 /**
  * Primary Native Activity for NexGram
  * Displays chat list, multi-account switcher, and navigation controls.
+ *
+ * ZERO FAKE CHATS POLICY:
+ * Does not show fake Telegram mock chats or fake notifications.
+ * Renders an accurate empty state when no accounts or dialogs exist.
  */
 public class MainActivity extends AppCompatActivity {
 
@@ -47,6 +51,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvActiveAccountName;
     private Button btnSwitchAccount;
     private RecyclerView recyclerViewChats;
+    private View layoutEmptyState;
     private ChatAdapter chatAdapter;
     private final List<ChatSummary> chatList = new ArrayList<>();
 
@@ -61,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
         tvActiveAccountName = findViewById(R.id.tvActiveAccountName);
         btnSwitchAccount = findViewById(R.id.btnSwitchAccount);
         recyclerViewChats = findViewById(R.id.recyclerViewChats);
+        layoutEmptyState = findViewById(R.id.layoutEmptyState);
 
         recyclerViewChats.setLayoutManager(new LinearLayoutManager(this));
         chatAdapter = new ChatAdapter(chatList, chat -> {
@@ -84,24 +90,33 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadAccountAndData() {
         AccountManager manager = NexGramApplication.getInstance().getAccountManager();
-        AccountManager.AccountItem active = manager.getActiveAccount();
+        AccountManager.AccountItem active = manager != null ? manager.getActiveAccount() : null;
 
         if (active != null) {
             tvActiveAccountName.setText(active.name + " (" + active.phone + ")");
+            btnSwitchAccount.setVisibility(manager.getAccountCount() > 1 ? View.VISIBLE : View.GONE);
         } else {
             tvActiveAccountName.setText("No Account Connected");
+            btnSwitchAccount.setVisibility(View.GONE);
         }
 
-        // Populate sample / cached chats
+        // STRICT ACCURACY: No fake chats inserted!
+        // Dialog list stays empty until live MTProto dialog synchronization is connected.
         chatList.clear();
-        chatList.add(new ChatSummary(1, "Telegram Notifications", "Login code: 84920", "12:45 PM", 1));
-        chatList.add(new ChatSummary(2, "Saved Messages", "Encrypted note", "Yesterday", 0));
-        chatList.add(new ChatSummary(3, "NexGram Community", "Welcome to NexGram Native Android!", "Nov 19", 0));
         chatAdapter.notifyDataSetChanged();
+
+        if (chatList.isEmpty()) {
+            recyclerViewChats.setVisibility(View.GONE);
+            layoutEmptyState.setVisibility(View.VISIBLE);
+        } else {
+            recyclerViewChats.setVisibility(View.VISIBLE);
+            layoutEmptyState.setVisibility(View.GONE);
+        }
     }
 
     private void showAccountSwitcherDialog() {
         AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+        if (manager == null) return;
         List<AccountManager.AccountItem> accounts = manager.getAllAccounts();
 
         if (accounts.isEmpty()) {
@@ -127,7 +142,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, 1, 0, R.string.title_settings).setIcon(android.R.drawable.ic_menu_preferences).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        menu.add(0, 1, 0, R.string.title_settings)
+            .setIcon(android.R.drawable.ic_menu_preferences)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
         return true;
     }
 

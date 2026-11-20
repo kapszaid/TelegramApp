@@ -2,6 +2,46 @@ plugins {
     id 'com.android.application'
 }
 
+def getTelegramAppId() {
+    def prop = project.findProperty("TELEGRAM_APP_ID")
+    if (prop != null && !prop.toString().trim().isEmpty() && prop.toString() != "0") {
+        return prop.toString().trim()
+    }
+    def localProps = new Properties()
+    def localPropsFile = rootProject.file("local.properties")
+    if (localPropsFile.exists()) {
+        localProps.load(new FileInputStream(localPropsFile))
+        if (localProps.getProperty("TELEGRAM_APP_ID") != null) {
+            return localProps.getProperty("TELEGRAM_APP_ID").trim()
+        }
+    }
+    def env = System.getenv("TELEGRAM_APP_ID")
+    if (env != null && !env.trim().isEmpty()) {
+        return env.trim()
+    }
+    return "0"
+}
+
+def getTelegramAppHash() {
+    def prop = project.findProperty("TELEGRAM_APP_HASH")
+    if (prop != null && !prop.toString().trim().isEmpty()) {
+        return prop.toString().trim()
+    }
+    def localProps = new Properties()
+    def localPropsFile = rootProject.file("local.properties")
+    if (localPropsFile.exists()) {
+        localProps.load(new FileInputStream(localPropsFile))
+        if (localProps.getProperty("TELEGRAM_APP_HASH") != null) {
+            return localProps.getProperty("TELEGRAM_APP_HASH").trim()
+        }
+    }
+    def env = System.getenv("TELEGRAM_APP_HASH")
+    if (env != null && !env.trim().isEmpty()) {
+        return env.trim()
+    }
+    return ""
+}
+
 android {
     namespace 'com.nexgram.messenger'
     compileSdk 35
@@ -15,9 +55,9 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
-        // Inject Telegram credentials into BuildConfig
-        def appId = project.findProperty("TELEGRAM_APP_ID") ?: "0"
-        def appHash = project.findProperty("TELEGRAM_APP_HASH") ?: ""
+        // Inject dynamic Telegram credentials into BuildConfig (never hardcoded in git)
+        def appId = getTelegramAppId()
+        def appHash = getTelegramAppHash()
         buildConfigField "int", "TELEGRAM_APP_ID", "${appId}"
         buildConfigField "String", "TELEGRAM_APP_HASH", "\"${appHash}\""
         buildConfigField "String", "APP_NAME", "\"NexGram\""

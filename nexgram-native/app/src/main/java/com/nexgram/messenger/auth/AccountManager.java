@@ -43,8 +43,19 @@ public class AccountManager {
     public AccountManager(Context context, SecureSessionVault sessionVault) {
         this.context = context;
         this.sessionVault = sessionVault;
-        this.prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        loadAccounts();
+        this.prefs = context != null ? context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) : null;
+        if (this.prefs != null) {
+            loadAccounts();
+        }
+    }
+
+    public AccountManager(SharedPreferences customPrefs, SecureSessionVault sessionVault) {
+        this.context = null;
+        this.sessionVault = sessionVault;
+        this.prefs = customPrefs;
+        if (this.prefs != null) {
+            loadAccounts();
+        }
     }
 
     private void loadAccounts() {
@@ -68,15 +79,24 @@ public class AccountManager {
     }
 
     public synchronized void addAccount(AccountItem item, String sessionAuthKey) {
-        // Prevent duplicate IDs
+        if (sessionVault == null) {
+            throw new SecurityException("SecureSessionVault is unavailable. Plaintext credential storage is disallowed.");
+        }
+        if (item == null || item.id == null || item.id.trim().isEmpty()) {
+            throw new IllegalArgumentException("Account item and ID cannot be null or empty");
+        }
+        // Save to secure encrypted vault first before metadata
+        sessionVault.saveSession(item.id, sessionAuthKey);
+
+        // Prevent duplicate IDs in metadata
         accounts.removeIf(a -> a.id.equals(item.id));
         accounts.add(item);
-        sessionVault.saveSession(item.id, sessionAuthKey);
         activeAccountId = item.id;
         saveAccounts();
     }
 
     public synchronized void switchAccount(String accountId) {
+        if (accountId == null) return;
         for (AccountItem item : accounts) {
             if (item.id.equals(accountId)) {
                 activeAccountId = accountId;
@@ -87,8 +107,11 @@ public class AccountManager {
     }
 
     public synchronized void removeAccount(String accountId) {
+        if (accountId == null) return;
         accounts.removeIf(a -> a.id.equals(accountId));
-        sessionVault.removeSession(accountId);
+        if (sessionVault != null) {
+            sessionVault.removeSession(accountId);
+        }
         if (activeAccountId != null && activeAccountId.equals(accountId)) {
             activeAccountId = accounts.isEmpty() ? null : accounts.get(0).id;
         }

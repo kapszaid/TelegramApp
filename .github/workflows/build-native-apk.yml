@@ -39,11 +39,12 @@ jobs:
       - name: Configure Telegram API Keys & Properties
         run: |
           cd nexgram-native
-          echo "APP_ID=${{ secrets.TELEGRAM_APP_ID || '35915345' }}" >> gradle.properties
-          echo "APP_HASH=${{ secrets.TELEGRAM_APP_HASH || 'c30ef6d70f443b8081e3b543800cf9bf' }}" >> gradle.properties
-          echo "RELEASE_KEY_PASSWORD=android" >> gradle.properties
-          echo "RELEASE_KEY_ALIAS=androidkey" >> gradle.properties
-          echo "RELEASE_STORE_PASSWORD=android" >> gradle.properties
+          # Use GitHub repository secrets with safe zero defaults (no hardcoded fallback production credentials)
+          echo "TELEGRAM_APP_ID=${{ secrets.TELEGRAM_APP_ID || '0' }}" >> gradle.properties
+          echo "TELEGRAM_APP_HASH=${{ secrets.TELEGRAM_APP_HASH || '' }}" >> gradle.properties
+          echo "RELEASE_KEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD || 'android' }}" >> gradle.properties
+          echo "RELEASE_KEY_ALIAS=${{ secrets.RELEASE_KEY_ALIAS || 'androidkey' }}" >> gradle.properties
+          echo "RELEASE_STORE_PASSWORD=${{ secrets.RELEASE_STORE_PASSWORD || 'android' }}" >> gradle.properties
 
       - name: Grant Execute Permission for Gradle Wrapper
         run: |
@@ -53,11 +54,11 @@ jobs:
       - name: Build Debug APK
         run: |
           cd nexgram-native
-          ./gradlew assembleAfatDebug --stacktrace || ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload NexGram Native APK
         uses: actions/upload-artifact@v4
         with:
           name: NexGram-Native-Debug-APK
-          path: nexgram-native/**/build/outputs/apk/**/*.apk
+          path: nexgram-native/app/build/outputs/apk/debug/*.apk
           retention-days: 14

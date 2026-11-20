@@ -1,8 +1,12 @@
 package com.nexgram.messenger.ui;
 
 import android.os.Bundle;
+import android.view.LayoutInflater;
 import android.view.MenuItem;
+import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
@@ -15,7 +19,11 @@ import com.nexgram.messenger.proxy.ProxyController;
 
 /**
  * Native Settings Activity
- * Provides hardware-backed Account Backup, Proxy Management, and Safe Logout.
+ *
+ * ACCURATE STATUS REPORTING & NO PLACEHOLDER SUCCESS NOTIFICATIONS:
+ * 1. Does NOT report backup export success unless a physical file was created and written.
+ * 2. Does NOT auto-configure loopback (127.0.0.1) as a fake proxy.
+ * 3. Clearly labels protocol and file integrations that await MTProto engine connection.
  */
 public class SettingsActivity extends AppCompatActivity {
 
@@ -42,69 +50,118 @@ public class SettingsActivity extends AppCompatActivity {
 
         loadProfile();
 
-        cardProxy.setOnClickListener(v -> toggleProxy());
-        cardBackup.setOnClickListener(v -> showBackupDialog());
+        cardProxy.setOnClickListener(v -> showProxyConfigurationDialog());
+        cardBackup.setOnClickListener(v -> showBackupInfoDialog());
         btnLogout.setOnClickListener(v -> confirmLogout());
     }
 
     private void loadProfile() {
         AccountManager manager = NexGramApplication.getInstance().getAccountManager();
-        AccountManager.AccountItem active = manager.getActiveAccount();
+        AccountManager.AccountItem active = manager != null ? manager.getActiveAccount() : null;
         if (active != null) {
             tvSettingsUser.setText(active.name);
             tvSettingsPhone.setText(active.phone);
+            btnLogout.setVisibility(View.VISIBLE);
         } else {
             tvSettingsUser.setText("No Active User");
-            tvSettingsPhone.setText("Tap to login");
+            tvSettingsPhone.setText("Tap to add an account (Protocol integration pending)");
+            btnLogout.setVisibility(View.GONE);
         }
 
         ProxyController proxy = NexGramApplication.getInstance().getProxyController();
-        ProxyController.ProxyConfig config = active != null ? proxy.getProxy(active.id) : null;
-        if (config != null && config.enabled) {
-            tvProxyStatus.setText("Enabled: " + config.host + ":" + config.port);
+        ProxyController.ProxyMetadata meta = (active != null && proxy != null) ? proxy.getProxyMetadata(active.id) : null;
+        if (meta != null && meta.enabled) {
+            tvProxyStatus.setText("Enabled: " + meta.host + ":" + meta.port + " (" + meta.type + ")");
         } else {
             tvProxyStatus.setText(R.string.proxy_disabled);
         }
     }
 
-    private void toggleProxy() {
-        AccountManager.AccountItem active = NexGramApplication.getInstance().getAccountManager().getActiveAccount();
+    private void showProxyConfigurationDialog() {
+        AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+        AccountManager.AccountItem active = manager != null ? manager.getActiveAccount() : null;
         if (active == null) {
-            Toast.makeText(this, "Authorize an account first", Toast.LENGTH_SHORT).show();
+            new AlertDialog.Builder(this)
+                    .setTitle("Account Required")
+                    .setMessage("Authorize an account before setting up a dedicated proxy profile.")
+                    .setPositiveButton("OK", null)
+                    .show();
             return;
         }
 
         ProxyController proxy = NexGramApplication.getInstance().getProxyController();
-        ProxyController.ProxyConfig config = proxy.getProxy(active.id);
-        if (config == null) {
-            config = new ProxyController.ProxyConfig();
-            config.host = "127.0.0.1";
-            config.port = 1080;
-            config.enabled = true;
-            proxy.saveProxy(active.id, config);
-            Toast.makeText(this, "Proxy Enabled", Toast.LENGTH_SHORT).show();
-        } else {
-            config.enabled = !config.enabled;
-            proxy.saveProxy(active.id, config);
-            Toast.makeText(this, config.enabled ? "Proxy Enabled" : "Proxy Disabled", Toast.LENGTH_SHORT).show();
-        }
-        loadProfile();
-    }
+        ProxyController.ProxyMetadata current = proxy.getProxyMetadata(active.id);
 
-    private void showBackupDialog() {
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_proxy_config, null);
+        EditText etHost = dialogView.findViewById(R.id.etProxyHost);
+        EditText etPort = dialogView.findViewById(R.id.etProxyPort);
+        EditText etSecret = dialogView.findViewById(R.id.etProxySecret);
+        RadioGroup rgType = dialogView.findViewById(R.id.rgProxyType);
+
+        if (current != null) {
+            etHost.setText(current.host);
+            etPort.setText(String.valueOf(current.port));
+            if (current.type == ProxyController.ProxyType.MTPROTO) {
+                rgType.check(R.id.rbMtproto);
+            }
+        }
+
         new AlertDialog.Builder(this)
-                .setTitle(R.string.title_backup)
-                .setMessage("Export password-protected AES-256-GCM encrypted backup of account sessions and preferences to Android document storage?")
-                .setPositiveButton("Export", (dialog, which) -> {
-                    Toast.makeText(this, "Encrypted backup exported securely.", Toast.LENGTH_LONG).show();
+                .setTitle("Configure Proxy")
+                .setView(dialogView)
+                .setPositiveButton("Save", (dialog, which) -> {
+                    String host = etHost.getText().toString().trim();
+                    String portStr = etPort.getText().toString().trim();
+                    String secret = etSecret.getText().toString().trim();
+                    int port;
+                    try {
+                        port = Integer.parseInt(portStr);
+                    } catch (NumberFormatException e) {
+                        Toast.makeText(this, "Invalid port number", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    try {
+                        ProxyController.validate(host, port);
+                    } catch (IllegalArgumentException e) {
+                        Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+                        return;
+                    }
+
+                    ProxyController.ProxyMetadata meta = new ProxyController.ProxyMetadata();
+                    meta.host = host;
+                    meta.port = port;
+                    meta.type = rgType.getCheckedRadioButtonId() == R.id.rbMtproto
+                            ? ProxyController.ProxyType.MTPROTO
+                            : ProxyController.ProxyType.SOCKS5;
+                    meta.enabled = true;
+
+                    proxy.saveProxy(active.id, meta, secret);
+                    loadProfile();
+                    Toast.makeText(this, "Proxy profile saved. (Native socket routing will activate with MTProto engine)", Toast.LENGTH_LONG).show();
+                })
+                .setNeutralButton(current != null && current.enabled ? "Disable" : null, (dialog, which) -> {
+                    proxy.setProxyEnabled(active.id, false);
+                    loadProfile();
+                    Toast.makeText(this, "Proxy disabled", Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
     }
 
+    private void showBackupInfoDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.title_backup)
+                .setMessage("Cryptographic Engine Status: Ready (AES-256-GCM + PBKDF2)\n\n" +
+                             "Android Document Storage Export: Pending live MTProto account session authorization.\n\n" +
+                             "When authorized accounts exist, this feature generates an encrypted archive exportable to Google Drive or local storage.")
+                .setPositiveButton("Understood", null)
+                .show();
+    }
+
     private void confirmLogout() {
         AccountManager manager = NexGramApplication.getInstance().getAccountManager();
-        AccountManager.AccountItem active = manager.getActiveAccount();
+        AccountManager.AccountItem active = manager != null ? manager.getActiveAccount() : null;
         if (active == null) {
             finish();
             return;
@@ -112,11 +169,11 @@ public class SettingsActivity extends AppCompatActivity {
 
         new AlertDialog.Builder(this)
                 .setTitle("Log Out?")
-                .setMessage("Are you sure you want to log out from " + active.name + "? All session keys will be securely wiped from the Android Keystore.")
+                .setMessage("Are you sure you want to log out from " + active.name + "? All authentication tokens will be securely wiped from the Android Keystore.")
                 .setPositiveButton("Log Out", (dialog, which) -> {
                     manager.removeAccount(active.id);
-                    Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show();
-                    finish();
+                    Toast.makeText(this, "Logged out. Session wiped from Keystore.", Toast.LENGTH_SHORT).show();
+                    loadProfile();
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
