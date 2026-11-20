@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#2AABEE</color>
+    <color name="primary_dark">#229ED9</color>
+    <color name="accent">#54A9EB</color>
+
+    <!-- Launcher Icon Colors -->
+    <color name="ic_launcher_background">#17212B</color>
+    <color name="ic_launcher_foreground">#2AABEE</color>
+
+    <!-- Dark Theme Backgrounds -->
+    <color name="bg_dark">#0E1621</color>
+    <color name="bg_dark_secondary">#17212B</color>
+    <color name="bg_dark_card">#242F3D</color>
+
+    <!-- Text Colors -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#7F91A4</color>
+    <color name="text_muted">#6C7883</color>
+
+    <!-- Status & Alerts -->
+    <color name="online_green">#00C853</color>
+    <color name="unread_badge">#2AABEE</color>
+    <color name="danger_red">#E53935</color>
+</resources>

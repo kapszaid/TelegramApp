@@ -49,6 +49,16 @@ android/local.properties
 android/*.iml
 android/app/*.iml
 
+# Native Android Project (nexgram-native)
+nexgram-native/.gradle/
+nexgram-native/**/build/
+nexgram-native/local.properties
+nexgram-native/**/.cxx/
+nexgram-native/.idea/
+nexgram-native/*.iml
+**/google-services.json
+**/release.keystore
+
 # Signing keys & certificates
 *.jks
 *.keystore
