@@ -323,8 +323,15 @@ public class SettingsActivity extends AppCompatActivity {
                         tdManager.closeClient(active.id);
                     }
                     manager.removeAccount(active.id);
-                    Toast.makeText(this, "Logged out. Session wiped from Keystore.", Toast.LENGTH_SHORT).show();
-                    loadProfile();
+                    AccountManager.AccountItem nextActive = manager.getActiveAccount();
+                    if (nextActive != null) {
+                        Toast.makeText(this, "Logged out from " + active.name + ". Switched to " + nextActive.name + ".", Toast.LENGTH_SHORT).show();
+                        loadProfile();
+                    } else {
+                        Toast.makeText(this, "Logged out. Session wiped from Keystore.", Toast.LENGTH_SHORT).show();
+                        loadProfile();
+                        finish();
+                    }
                 })
                 .setNegativeButton("Cancel", null)
                 .show();

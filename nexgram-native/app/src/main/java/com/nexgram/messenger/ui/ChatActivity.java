@@ -550,9 +550,15 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
     }
 
     private void connectTdLibAndLoadMessages() {
+        String targetAccountId = getIntent().getStringExtra("account_id");
         AccountManager accManager = NexGramApplication.getInstance().getAccountManager();
-        AccountManager.AccountItem active = accManager != null ? accManager.getActiveAccount() : null;
-        if (active == null) {
+        if (targetAccountId == null || targetAccountId.trim().isEmpty()) {
+            AccountManager.AccountItem active = accManager != null ? accManager.getActiveAccount() : null;
+            if (active != null) {
+                targetAccountId = active.id;
+            }
+        }
+        if (targetAccountId == null) {
             Toast.makeText(this, "No active Telegram account", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -560,7 +566,7 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
         TdLibManager tdManager = NexGramApplication.getInstance().getTdLibManager();
         if (tdManager == null) return;
 
-        activeClient = tdManager.getOrCreateClient(active.id);
+        activeClient = tdManager.getOrCreateClient(targetAccountId);
         if (activeClient == null) return;
 
         activeClient.addRawUpdateListener(rawUpdateListener);

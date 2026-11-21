@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.SharedPreferences;
@@ -993,5 +994,171 @@ public class TdLibIntegrationTest {
         adapter.setMessages(Collections.singletonList(m));
         assertEquals(1, adapter.getMessageCount());
         assertTrue(adapter.containsMessage(1001L));
+    }
+
+    @Test
+    public void testAccountRegistryPersistenceAndSwitching() {
+        MockSharedPreferences mockPrefs = new MockSharedPreferences();
+        SecureSessionVault testVault = new SecureSessionVault(mockPrefs, true);
+        com.nexgram.messenger.auth.AccountManager manager = new com.nexgram.messenger.auth.AccountManager(mockPrefs, testVault);
+
+        // Add Account 1
+        com.nexgram.messenger.auth.AccountManager.AccountItem acc1 = new com.nexgram.messenger.auth.AccountManager.AccountItem(
+                "account_1", "Alice", "+111111111", "alice_tg", 1001L, null);
+        manager.addAccount(acc1, "auth_key_alice");
+
+        // Add Account 2
+        com.nexgram.messenger.auth.AccountManager.AccountItem acc2 = new com.nexgram.messenger.auth.AccountManager.AccountItem(
+                "account_2", "Bob", "+222222222", "bob_tg", 2002L, null);
+        manager.addAccount(acc2, "auth_key_bob");
+
+        assertEquals(2, manager.getAccountCount());
+        assertEquals("account_2", manager.getActiveAccount().id);
+
+        // Switch to Account 1
+        manager.switchAccount("account_1");
+        assertEquals("account_1", manager.getActiveAccount().id);
+
+        // Simulate app restart / reload from preferences
+        com.nexgram.messenger.auth.AccountManager reloadedManager = new com.nexgram.messenger.auth.AccountManager(mockPrefs, testVault);
+        assertEquals(2, reloadedManager.getAccountCount());
+        assertNotNull(reloadedManager.getActiveAccount());
+        assertEquals("account_1", reloadedManager.getActiveAccount().id);
+        assertEquals("Alice", reloadedManager.getActiveAccount().name);
+    }
+
+    @Test
+    public void testStableAccountIdGeneration() {
+        MockSharedPreferences mockPrefs = new MockSharedPreferences();
+        SecureSessionVault testVault = new SecureSessionVault(mockPrefs, true);
+        com.nexgram.messenger.auth.AccountManager manager = new com.nexgram.messenger.auth.AccountManager(mockPrefs, testVault);
+
+        String id1 = manager.generateNewAccountId();
+        String id2 = manager.generateNewAccountId();
+
+        assertNotNull(id1);
+        assertNotNull(id2);
+        assertTrue(id1.startsWith("account_"));
+        assertTrue(id2.startsWith("account_"));
+        assertNotEquals(id1, id2);
+    }
+
+    @Test
+    public void testMultiAccountDirectoryAndKeyIsolation() {
+        MockSharedPreferences mockPrefs = new MockSharedPreferences();
+        SecureSessionVault testVault = new SecureSessionVault(mockPrefs, true);
+
+        byte[] key1 = testVault.getOrCreateDatabaseKey("account_alpha");
+        byte[] key2 = testVault.getOrCreateDatabaseKey("account_beta");
+
+        assertNotNull(key1);
+        assertNotNull(key2);
+        assertEquals(32, key1.length);
+        assertEquals(32, key2.length);
+        assertFalse(Arrays.equals(key1, key2));
+
+        File baseDir = new File("/data/user/0/com.nexgram.messenger/files/tdlib_accounts");
+        File dir1 = new File(baseDir, "account_alpha");
+        File dir2 = new File(baseDir, "account_beta");
+
+        assertNotEquals(dir1.getAbsolutePath(), dir2.getAbsolutePath());
+    }
+
+    @Test
+    public void testAccountRemovalIsolation() {
+        MockSharedPreferences mockPrefs = new MockSharedPreferences();
+        SecureSessionVault testVault = new SecureSessionVault(mockPrefs, true);
+        com.nexgram.messenger.auth.AccountManager manager = new com.nexgram.messenger.auth.AccountManager(mockPrefs, testVault);
+
+        manager.addAccount(new com.nexgram.messenger.auth.AccountManager.AccountItem("acc_1", "User 1", "+1001", "u1", 1L, null), "key_1");
+        manager.addAccount(new com.nexgram.messenger.auth.AccountManager.AccountItem("acc_2", "User 2", "+1002", "u2", 2L, null), "key_2");
+        manager.addAccount(new com.nexgram.messenger.auth.AccountManager.AccountItem("acc_3", "User 3", "+1003", "u3", 3L, null), "key_3");
+
+        assertEquals(3, manager.getAccountCount());
+        assertTrue(testVault.hasSession("acc_1"));
+        assertTrue(testVault.hasSession("acc_2"));
+        assertTrue(testVault.hasSession("acc_3"));
+
+        // Remove acc_2
+        manager.removeAccount("acc_2");
+
+        assertEquals(2, manager.getAccountCount());
+        assertNull(manager.getAccount("acc_2"));
+        assertNotNull(manager.getAccount("acc_1"));
+        assertNotNull(manager.getAccount("acc_3"));
+        assertTrue(testVault.hasSession("acc_1"));
+        assertFalse(testVault.hasSession("acc_2"));
+        assertTrue(testVault.hasSession("acc_3"));
+    }
+
+    @Test
+    public void testPerAccountProxyIsolation() {
+        MockSharedPreferences mockPrefs = new MockSharedPreferences();
+        SecureSessionVault testVault = new SecureSessionVault(mockPrefs, true);
+        com.nexgram.messenger.proxy.ProxyController proxy = new com.nexgram.messenger.proxy.ProxyController(mockPrefs, testVault);
+
+        // Account 1: Germany SOCKS5
+        com.nexgram.messenger.proxy.ProxyController.ProxyMetadata meta1 = new com.nexgram.messenger.proxy.ProxyController.ProxyMetadata();
+        meta1.type = com.nexgram.messenger.proxy.ProxyController.ProxyType.SOCKS5;
+        meta1.host = "194.135.80.10";
+        meta1.port = 1080;
+        meta1.username = "user_de";
+        meta1.enabled = true;
+        meta1.label = "Germany SOCKS5";
+        proxy.saveProxy("acc_1", meta1, "pass_de");
+
+        // Account 2: USA MTProto
+        com.nexgram.messenger.proxy.ProxyController.ProxyMetadata meta2 = new com.nexgram.messenger.proxy.ProxyController.ProxyMetadata();
+        meta2.type = com.nexgram.messenger.proxy.ProxyController.ProxyType.MTPROTO;
+        meta2.host = "142.250.190.46";
+        meta2.port = 443;
+        meta2.enabled = true;
+        meta2.label = "USA MTProto";
+        proxy.saveProxy("acc_2", meta2, "secret_mtproto_usa");
+
+        // Verify acc_1 config
+        com.nexgram.messenger.proxy.ProxyController.ProxyMetadata read1 = proxy.getProxyMetadata("acc_1");
+        assertNotNull(read1);
+        assertEquals("194.135.80.10", read1.host);
+        assertEquals(1080, read1.port);
+        assertEquals(com.nexgram.messenger.proxy.ProxyController.ProxyType.SOCKS5, read1.type);
+        assertEquals("pass_de", proxy.getProxySecret("acc_1"));
+
+        // Verify acc_2 config
+        com.nexgram.messenger.proxy.ProxyController.ProxyMetadata read2 = proxy.getProxyMetadata("acc_2");
+        assertNotNull(read2);
+        assertEquals("142.250.190.46", read2.host);
+        assertEquals(443, read2.port);
+        assertEquals(com.nexgram.messenger.proxy.ProxyController.ProxyType.MTPROTO, read2.type);
+        assertEquals("secret_mtproto_usa", proxy.getProxySecret("acc_2"));
+
+        // Change acc_1 to DIRECT, acc_2 must remain untouched
+        proxy.saveDirectConnection("acc_1");
+        com.nexgram.messenger.proxy.ProxyController.ProxyMetadata direct1 = proxy.getProxyMetadata("acc_1");
+        assertFalse(direct1.enabled);
+        assertEquals(com.nexgram.messenger.proxy.ProxyController.ProxyType.DIRECT, direct1.type);
+
+        com.nexgram.messenger.proxy.ProxyController.ProxyMetadata untouched2 = proxy.getProxyMetadata("acc_2");
+        assertTrue(untouched2.enabled);
+        assertEquals("142.250.190.46", untouched2.host);
+    }
+
+    @Test
+    public void testDuplicateAccountDetection() {
+        MockSharedPreferences mockPrefs = new MockSharedPreferences();
+        SecureSessionVault testVault = new SecureSessionVault(mockPrefs, true);
+        com.nexgram.messenger.auth.AccountManager manager = new com.nexgram.messenger.auth.AccountManager(mockPrefs, testVault);
+
+        manager.addAccount(new com.nexgram.messenger.auth.AccountManager.AccountItem("acc_1", "Rakib", "+919876543210", "rakib", 6115535877L, null), "key");
+
+        // Detection by Telegram User ID
+        assertNotNull(manager.getAccountByUserId(6115535877L));
+        assertEquals("acc_1", manager.getAccountByUserId(6115535877L).id);
+        assertNull(manager.getAccountByUserId(999999999L));
+
+        // Detection by Phone Number
+        assertTrue(manager.hasAccountWithPhone("+91 98765 43210"));
+        assertTrue(manager.hasAccountWithPhone("919876543210"));
+        assertFalse(manager.hasAccountWithPhone("+1234567890"));
     }
 }

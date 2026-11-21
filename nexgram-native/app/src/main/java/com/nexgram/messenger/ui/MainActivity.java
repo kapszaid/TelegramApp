@@ -17,6 +17,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
@@ -34,10 +35,13 @@ import com.google.android.material.tabs.TabLayout;
 import com.nexgram.messenger.NexGramApplication;
 import com.nexgram.messenger.R;
 import com.nexgram.messenger.auth.AccountManager;
+import com.nexgram.messenger.proxy.ProxyController;
 import com.nexgram.messenger.tdlib.TdLibAccountClient;
 import com.nexgram.messenger.tdlib.TdLibManager;
 import com.nexgram.messenger.ui.adapter.ChatAdapter;
+import com.nexgram.messenger.ui.adapter.DrawerAccountAdapter;
 import com.nexgram.messenger.ui.helpers.TelegramAvatarHelper;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -77,11 +81,18 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     private NavigationView navigationView;
 
     // Navigation Header Views
+    private View layoutNavProfileHeader;
     private ImageView ivNavAvatarCircle;
     private TextView tvNavAvatarInitials;
     private ImageView ivNavAvatarPhoto;
     private TextView tvNavUserName;
     private TextView tvNavUserPhone;
+    private ImageView ivNavDropdown;
+    private LinearLayout layoutAccountSwitcher;
+    private RecyclerView rvDrawerAccounts;
+    private View btnNavAddAccount;
+    private DrawerAccountAdapter accountSwitcherAdapter;
+    private boolean isAccountSwitcherExpanded = false;
 
     // Chat data & state
     private final ConcurrentHashMap<Long, TdApi.Chat> allChatsMap = new ConcurrentHashMap<>();
@@ -180,12 +191,159 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
 
         View headerView = navigationView.getHeaderView(0);
         if (headerView != null) {
+            layoutNavProfileHeader = headerView.findViewById(R.id.layoutNavProfileHeader);
             ivNavAvatarCircle = headerView.findViewById(R.id.ivNavAvatarCircle);
             tvNavAvatarInitials = headerView.findViewById(R.id.tvNavAvatarInitials);
             ivNavAvatarPhoto = headerView.findViewById(R.id.ivNavAvatarPhoto);
             tvNavUserName = headerView.findViewById(R.id.tvNavUserName);
             tvNavUserPhone = headerView.findViewById(R.id.tvNavUserPhone);
+            ivNavDropdown = headerView.findViewById(R.id.ivNavDropdown);
+            layoutAccountSwitcher = headerView.findViewById(R.id.layoutAccountSwitcher);
+            rvDrawerAccounts = headerView.findViewById(R.id.rvDrawerAccounts);
+            btnNavAddAccount = headerView.findViewById(R.id.btnNavAddAccount);
+
+            if (rvDrawerAccounts != null) {
+                rvDrawerAccounts.setLayoutManager(new LinearLayoutManager(this));
+                accountSwitcherAdapter = new DrawerAccountAdapter(this, new DrawerAccountAdapter.OnAccountClickListener() {
+                    @Override
+                    public void onAccountClick(AccountManager.AccountItem account) {
+                        AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+                        if (manager != null && account != null) {
+                            AccountManager.AccountItem current = manager.getActiveAccount();
+                            if (current == null || !account.id.equals(current.id)) {
+                                switchActiveAccount(account.id);
+                            } else {
+                                collapseAccountSwitcher();
+                                drawerLayout.closeDrawer(GravityCompat.START);
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onAccountLongClick(AccountManager.AccountItem account) {
+                        confirmRemoveAccount(account);
+                    }
+                });
+                rvDrawerAccounts.setAdapter(accountSwitcherAdapter);
+            }
+
+            if (layoutNavProfileHeader != null) {
+                layoutNavProfileHeader.setOnClickListener(v -> toggleAccountSwitcher());
+            }
+
+            if (btnNavAddAccount != null) {
+                btnNavAddAccount.setOnClickListener(v -> {
+                    drawerLayout.closeDrawer(GravityCompat.START);
+                    collapseAccountSwitcher();
+                    AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+                    String newAccountId = manager != null ? manager.generateNewAccountId() : "account_" + System.currentTimeMillis();
+                    Intent authIntent = new Intent(MainActivity.this, AuthActivity.class);
+                    authIntent.putExtra("account_id", newAccountId);
+                    startActivity(authIntent);
+                });
+            }
         }
+    }
+
+    private void toggleAccountSwitcher() {
+        if (isAccountSwitcherExpanded) {
+            collapseAccountSwitcher();
+        } else {
+            expandAccountSwitcher();
+        }
+    }
+
+    private void expandAccountSwitcher() {
+        if (layoutAccountSwitcher != null) {
+            layoutAccountSwitcher.setVisibility(View.VISIBLE);
+            isAccountSwitcherExpanded = true;
+            if (ivNavDropdown != null) {
+                ivNavDropdown.animate().rotation(180f).setDuration(200).start();
+            }
+            refreshAccountSwitcherList();
+        }
+    }
+
+    private void collapseAccountSwitcher() {
+        if (layoutAccountSwitcher != null) {
+            layoutAccountSwitcher.setVisibility(View.GONE);
+            isAccountSwitcherExpanded = false;
+            if (ivNavDropdown != null) {
+                ivNavDropdown.animate().rotation(0f).setDuration(200).start();
+            }
+        }
+    }
+
+    private void refreshAccountSwitcherList() {
+        AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+        if (manager != null && accountSwitcherAdapter != null) {
+            List<AccountManager.AccountItem> all = manager.getAllAccounts();
+            AccountManager.AccountItem active = manager.getActiveAccount();
+            String activeId = active != null ? active.id : null;
+            accountSwitcherAdapter.updateAccounts(all, activeId);
+        }
+    }
+
+    private void switchActiveAccount(String newAccountId) {
+        AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+        if (manager == null || newAccountId == null) return;
+
+        manager.switchAccount(newAccountId);
+        collapseAccountSwitcher();
+        drawerLayout.closeDrawer(GravityCompat.START);
+
+        // Detach old listener and reset active client
+        if (activeClient != null) {
+            activeClient.removeRawUpdateListener(rawUpdateListener);
+            activeClient = null;
+        }
+
+        // Clear chat UI state for isolated switch
+        allChatsMap.clear();
+        displayChats.clear();
+        if (chatAdapter != null) {
+            chatAdapter.notifyDataSetChanged();
+        }
+
+        // Apply saved proxy for the new account
+        TdLibManager tdManager = NexGramApplication.getInstance().getTdLibManager();
+        ProxyController proxyController = NexGramApplication.getInstance().getProxyController();
+        if (tdManager != null) {
+            TdLibAccountClient newClient = tdManager.getOrCreateClient(newAccountId);
+            if (proxyController != null) {
+                newClient.applySavedProxy(proxyController, null);
+            }
+        }
+
+        // Resync UI, profile, attach update listener and load chats
+        syncActiveAccountAndChats();
+    }
+
+    private void confirmRemoveAccount(AccountManager.AccountItem account) {
+        if (account == null) return;
+        new AlertDialog.Builder(this)
+                .setTitle("Remove Account")
+                .setMessage("Are you sure you want to log out and remove " + account.name + "?")
+                .setPositiveButton("Remove", (dialog, which) -> {
+                    TdLibManager tdManager = NexGramApplication.getInstance().getTdLibManager();
+                    if (tdManager != null) {
+                        TdLibAccountClient client = tdManager.getClient(account.id);
+                        if (client != null) {
+                            client.logOut(result -> {
+                                client.deleteDatabaseFiles();
+                            });
+                        }
+                        tdManager.closeClient(account.id);
+                    }
+                    AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+                    if (manager != null) {
+                        manager.removeAccount(account.id);
+                    }
+                    refreshAccountSwitcherList();
+                    syncActiveAccountAndChats();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void setupFolderTabs() {
@@ -247,6 +405,11 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             Intent intent = new Intent(MainActivity.this, ChatActivity.class);
             intent.putExtra("chat_id", chat.id);
             intent.putExtra("chat_title", chat.title != null ? chat.title : "Chat");
+            AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+            AccountManager.AccountItem active = manager != null ? manager.getActiveAccount() : null;
+            if (active != null) {
+                intent.putExtra("account_id", active.id);
+            }
             startActivity(intent);
         });
         recyclerViewChats.setAdapter(chatAdapter);
@@ -294,6 +457,27 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             this.activeClient = client;
             this.activeClient.addRawUpdateListener(rawUpdateListener);
         }
+
+        // Apply saved proxy configuration for this account if present
+        ProxyController proxyController = NexGramApplication.getInstance().getProxyController();
+        if (proxyController != null) {
+            this.activeClient.applySavedProxy(proxyController, null);
+        }
+
+        // Fetch real account profile info from TDLib
+        this.activeClient.getMe(userObj -> {
+            if (userObj instanceof TdApi.User) {
+                TdApi.User u = (TdApi.User) userObj;
+                String fullName = (u.firstName != null ? u.firstName : "") + (u.lastName != null && !u.lastName.isEmpty() ? " " + u.lastName : "");
+                active.name = fullName.trim().isEmpty() ? "Telegram User" : fullName.trim();
+                if (u.phoneNumber != null && !u.phoneNumber.isEmpty()) {
+                    active.phone = "+" + u.phoneNumber;
+                }
+                active.telegramUserId = u.id;
+                manager.updateAccount(active);
+                runOnUiThread(() -> updateDrawerProfile(active));
+            }
+        });
 
         // Setup ChatAdapter with current client for avatar loading
         setupRecyclerView();
@@ -526,12 +710,25 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
 
     private void updateDrawerProfile(AccountManager.AccountItem active) {
         if (active != null) {
-            tvNavUserName.setText(active.name);
-            tvNavUserPhone.setText(active.phone);
-            ivNavAvatarCircle.setColorFilter(TelegramAvatarHelper.getAvatarColor(Math.abs(active.name.hashCode())));
-            tvNavAvatarInitials.setText(TelegramAvatarHelper.getInitials(active.name));
-            tvNavAvatarInitials.setVisibility(View.VISIBLE);
-            ivNavAvatarPhoto.setVisibility(View.GONE);
+            tvNavUserName.setText(active.name != null && !active.name.isEmpty() ? active.name : "Telegram User");
+            tvNavUserPhone.setText(active.phone != null && !active.phone.isEmpty() ? active.phone : "");
+            ivNavAvatarCircle.setColorFilter(TelegramAvatarHelper.getAvatarColor(Math.abs((active.name != null ? active.name : active.id).hashCode())));
+
+            if (active.avatarPath != null && !active.avatarPath.isEmpty() && new File(active.avatarPath).exists()) {
+                try {
+                    ivNavAvatarPhoto.setImageBitmap(android.graphics.BitmapFactory.decodeFile(active.avatarPath));
+                    ivNavAvatarPhoto.setVisibility(View.VISIBLE);
+                    tvNavAvatarInitials.setVisibility(View.GONE);
+                } catch (Exception e) {
+                    ivNavAvatarPhoto.setVisibility(View.GONE);
+                    tvNavAvatarInitials.setVisibility(View.VISIBLE);
+                    tvNavAvatarInitials.setText(TelegramAvatarHelper.getInitials(active.name));
+                }
+            } else {
+                ivNavAvatarPhoto.setVisibility(View.GONE);
+                tvNavAvatarInitials.setVisibility(View.VISIBLE);
+                tvNavAvatarInitials.setText(TelegramAvatarHelper.getInitials(active.name));
+            }
         } else {
             tvNavUserName.setText("NexGram");
             tvNavUserPhone.setText("Tap to log in");
@@ -540,6 +737,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             tvNavAvatarInitials.setVisibility(View.VISIBLE);
             ivNavAvatarPhoto.setVisibility(View.GONE);
         }
+        refreshAccountSwitcherList();
     }
 
     private void showLoggedOutEmptyState() {
@@ -613,7 +811,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
 
     @Override
     public void onBackPressed() {
-        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+        if (isAccountSwitcherExpanded) {
+            collapseAccountSwitcher();
+        } else if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
             drawerLayout.closeDrawer(GravityCompat.START);
         } else if (isSearching) {
             closeSearchMode();

@@ -95,6 +95,26 @@ public class TdLibManager {
         return activeClients.get(accountId);
     }
 
+    public boolean isClientActive(String accountId) {
+        if (accountId == null) return false;
+        TdLibAccountClient client = activeClients.get(accountId);
+        return client != null && !client.isClosed();
+    }
+
+    public synchronized void initializeRegisteredAccounts(java.util.List<com.nexgram.messenger.auth.AccountManager.AccountItem> accounts, String activeAccountId) {
+        if (accounts == null || accounts.isEmpty()) return;
+        Log.i(TAG, "Pre-initializing " + accounts.size() + " registered Telegram account clients...");
+        // Ensure active account is created first
+        if (activeAccountId != null) {
+            getOrCreateClient(activeAccountId);
+        }
+        for (com.nexgram.messenger.auth.AccountManager.AccountItem item : accounts) {
+            if (item != null && item.id != null && !item.id.equals(activeAccountId)) {
+                getOrCreateClient(item.id);
+            }
+        }
+    }
+
     public synchronized void closeClient(String accountId) {
         if (accountId == null) return;
         TdLibAccountClient client = activeClients.remove(accountId);

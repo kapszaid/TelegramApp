@@ -44,6 +44,11 @@ public class NexGramApplication extends Application {
         // 4. Initialize native TDLib multi-account manager layer if vault is available
         if (vaultAvailable) {
             com.nexgram.messenger.tdlib.TdLibManager.init(this, sessionVault);
+            AccountManager.AccountItem active = accountManager.getActiveAccount();
+            com.nexgram.messenger.tdlib.TdLibManager.getInstance().initializeRegisteredAccounts(
+                accountManager.getAllAccounts(),
+                active != null ? active.id : null
+            );
         }
 
         Log.i(TAG, "NexGram Native Client initialized. Vault Available: " + vaultAvailable +

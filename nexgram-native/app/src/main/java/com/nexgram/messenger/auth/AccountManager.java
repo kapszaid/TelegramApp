@@ -23,12 +23,20 @@ public class AccountManager {
         public String phone;
         public String username;
         public long registeredAt;
+        public String avatarPath;
+        public long telegramUserId;
 
         public AccountItem(String id, String name, String phone, String username) {
+            this(id, name, phone, username, 0, null);
+        }
+
+        public AccountItem(String id, String name, String phone, String username, long telegramUserId, String avatarPath) {
             this.id = id;
             this.name = name;
             this.phone = phone;
             this.username = username;
+            this.telegramUserId = telegramUserId;
+            this.avatarPath = avatarPath;
             this.registeredAt = System.currentTimeMillis();
         }
     }
@@ -68,6 +76,18 @@ public class AccountManager {
                 accounts.addAll(loaded);
             }
         }
+
+        // Automatic migration & preservation of legacy authenticated account_main
+        if (accounts.isEmpty() && context != null) {
+            java.io.File mainDir = new java.io.File(context.getFilesDir(), "tdlib_accounts/account_main");
+            if (mainDir.exists() && sessionVault != null && (sessionVault.hasSession("account_main") || sessionVault.getDatabaseKey("account_main") != null)) {
+                AccountItem legacy = new AccountItem("account_main", "Telegram Account", "", "");
+                accounts.add(legacy);
+                activeAccountId = "account_main";
+                saveAccounts();
+            }
+        }
+
         activeAccountId = prefs.getString(KEY_ACTIVE_ACCOUNT_ID, accounts.isEmpty() ? null : accounts.get(0).id);
     }
 
@@ -76,6 +96,58 @@ public class AccountManager {
                 .putString(KEY_ACCOUNTS_LIST, gson.toJson(accounts))
                 .putString(KEY_ACTIVE_ACCOUNT_ID, activeAccountId)
                 .apply();
+    }
+
+    public synchronized String generateNewAccountId() {
+        String newId;
+        do {
+            newId = "account_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        } while (getAccount(newId) != null);
+        return newId;
+    }
+
+    public synchronized void updateAccount(AccountItem item) {
+        if (item == null || item.id == null) return;
+        boolean found = false;
+        for (int i = 0; i < accounts.size(); i++) {
+            if (accounts.get(i).id.equals(item.id)) {
+                accounts.set(i, item);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            accounts.add(item);
+        }
+        saveAccounts();
+    }
+
+    public synchronized AccountItem getAccount(String accountId) {
+        if (accountId == null) return null;
+        for (AccountItem item : accounts) {
+            if (item.id.equals(accountId)) return item;
+        }
+        return null;
+    }
+
+    public synchronized AccountItem getAccountByUserId(long userId) {
+        if (userId <= 0) return null;
+        for (AccountItem item : accounts) {
+            if (item.telegramUserId == userId) return item;
+        }
+        return null;
+    }
+
+    public synchronized boolean hasAccountWithPhone(String phone) {
+        if (phone == null || phone.trim().isEmpty()) return false;
+        String cleaned = phone.replaceAll("[^0-9]", "");
+        for (AccountItem item : accounts) {
+            if (item.phone != null) {
+                String itemClean = item.phone.replaceAll("[^0-9]", "");
+                if (!cleaned.isEmpty() && cleaned.equals(itemClean)) return true;
+            }
+        }
+        return false;
     }
 
     public synchronized void addAccount(AccountItem item, String sessionAuthKey) {

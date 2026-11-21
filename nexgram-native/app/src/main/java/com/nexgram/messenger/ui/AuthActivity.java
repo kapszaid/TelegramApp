@@ -50,7 +50,10 @@ import org.drinkless.tdlib.TdApi;
  */
 public class AuthActivity extends AppCompatActivity {
     private static final String TAG = "AuthActivity";
-    public static final String ACCOUNT_ID = "account_main";
+    public static final String DEFAULT_ACCOUNT_ID = "account_main";
+    public static final String ACCOUNT_ID = DEFAULT_ACCOUNT_ID;
+    private String accountId = DEFAULT_ACCOUNT_ID;
+    private boolean isAuthenticationSuccessful = false;
 
     private static class CountryItem {
         final String name;
@@ -103,6 +106,16 @@ public class AuthActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_auth);
+
+        String reqId = getIntent().getStringExtra("account_id");
+        AccountManager accMgr = NexGramApplication.getInstance().getAccountManager();
+        if (reqId != null && !reqId.trim().isEmpty()) {
+            this.accountId = reqId.trim();
+        } else if (accMgr != null && accMgr.getActiveAccount() != null) {
+            this.accountId = accMgr.generateNewAccountId();
+        } else {
+            this.accountId = DEFAULT_ACCOUNT_ID;
+        }
 
         initViews();
         setupCountryPicker();
@@ -211,7 +224,7 @@ public class AuthActivity extends AppCompatActivity {
         }
 
         setLoading(true);
-        this.client = tdManager.getOrCreateClient(ACCOUNT_ID);
+        this.client = tdManager.getOrCreateClient(this.accountId);
 
         this.client.addStateListener(new TdLibAccountClient.StateListener() {
             @Override
@@ -392,6 +405,7 @@ public class AuthActivity extends AppCompatActivity {
 
     private void onAuthenticationSuccess() {
         setLoading(true);
+        isAuthenticationSuccessful = true;
         client.getMe(result -> {
             runOnUiThread(() -> {
                 setLoading(false);
@@ -404,13 +418,29 @@ public class AuthActivity extends AppCompatActivity {
 
                     AccountManager manager = NexGramApplication.getInstance().getAccountManager();
                     if (manager != null) {
+                        // Check if this account is already registered under another ID
+                        AccountManager.AccountItem existing = manager.getAccountByUserId(user.id);
+                        if (existing != null && !existing.id.equals(this.accountId)) {
+                            Toast.makeText(this, "Account already added (" + existing.name + "). Switching...", Toast.LENGTH_SHORT).show();
+                            manager.switchAccount(existing.id);
+                            TdLibManager tdManager = NexGramApplication.getInstance().getTdLibManager();
+                            if (tdManager != null) {
+                                tdManager.closeClient(this.accountId);
+                            }
+                            navigateToMain();
+                            return;
+                        }
+
                         AccountManager.AccountItem item = new AccountManager.AccountItem(
-                                ACCOUNT_ID,
+                                this.accountId,
                                 fullName.isEmpty() ? "Telegram User" : fullName,
                                 phone.startsWith("+") ? phone : "+" + phone,
-                                username
+                                username,
+                                user.id,
+                                null
                         );
-                        manager.addAccount(item, "tdlib_session_" + ACCOUNT_ID);
+                        manager.addAccount(item, "tdlib_session_" + this.accountId);
+                        manager.switchAccount(this.accountId);
                     }
 
                     Toast.makeText(this, "Welcome, " + (fullName.isEmpty() ? "Telegram User" : fullName) + "!", Toast.LENGTH_LONG).show();
@@ -420,6 +450,20 @@ public class AuthActivity extends AppCompatActivity {
                 }
             });
         });
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (!isAuthenticationSuccessful) {
+            AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+            if (manager != null && manager.getAccount(this.accountId) == null && !DEFAULT_ACCOUNT_ID.equals(this.accountId)) {
+                TdLibManager tdManager = NexGramApplication.getInstance().getTdLibManager();
+                if (tdManager != null) {
+                    tdManager.closeClient(this.accountId);
+                }
+            }
+        }
     }
 
     private void navigateToMain() {
@@ -494,8 +538,8 @@ public class AuthActivity extends AppCompatActivity {
 
     private void showProxyConfigurationDialog() {
         ProxyController proxy = NexGramApplication.getInstance().getProxyController();
-        ProxyController.ProxyMetadata current = proxy != null ? proxy.getProxyMetadata(ACCOUNT_ID) : null;
-        String currentSecret = proxy != null ? proxy.getProxySecret(ACCOUNT_ID) : "";
+        ProxyController.ProxyMetadata current = proxy != null ? proxy.getProxyMetadata(this.accountId) : null;
+        String currentSecret = proxy != null ? proxy.getProxySecret(this.accountId) : "";
 
         View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_proxy_config, null);
         RadioGroup rgType = dialogView.findViewById(R.id.rgProxyType);
@@ -617,7 +661,7 @@ public class AuthActivity extends AppCompatActivity {
                 .setPositiveButton("Save & Connect", (dialog, which) -> {
                     if (proxy == null) return;
                     if (rbDirect.isChecked()) {
-                        proxy.saveDirectConnection(ACCOUNT_ID);
+                        proxy.saveDirectConnection(this.accountId);
                         if (client != null) {
                             client.disableProxy(null);
                         }
@@ -645,7 +689,7 @@ public class AuthActivity extends AppCompatActivity {
                     meta.enabled = true;
                     meta.type = rbMtproto.isChecked() ? ProxyController.ProxyType.MTPROTO : ProxyController.ProxyType.SOCKS5;
 
-                    proxy.saveProxy(ACCOUNT_ID, meta, secret);
+                    proxy.saveProxy(this.accountId, meta, secret);
 
                     if (client != null) {
                         TdApi.Proxy tdProxy = ProxyController.buildTdApiProxy(meta, secret);
