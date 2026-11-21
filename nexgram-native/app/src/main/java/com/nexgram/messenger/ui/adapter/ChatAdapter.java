@@ -34,13 +34,17 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ChatViewHolder
     private final Context context;
     private final List<TdApi.Chat> items;
     private final OnChatClickListener listener;
-    private final TdLibAccountClient client;
+    private TdLibAccountClient client;
 
     public ChatAdapter(Context context, List<TdApi.Chat> items, TdLibAccountClient client, OnChatClickListener listener) {
         this.context = context;
         this.items = items;
         this.client = client;
         this.listener = listener;
+    }
+
+    public void setActiveClient(TdLibAccountClient client) {
+        this.client = client;
     }
 
     @NonNull

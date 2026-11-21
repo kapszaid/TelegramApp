@@ -615,6 +615,7 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
                 if (result instanceof TdApi.Messages) {
                     TdApi.Messages msgs = (TdApi.Messages) result;
                     if (msgs.messages != null && msgs.messages.length > 0) {
+                        preloadSenderNames(Arrays.asList(msgs.messages));
                         messageAdapter.setMessages(Arrays.asList(msgs.messages));
                         recyclerViewMessages.scrollToPosition(messageAdapter.getItemCount() - 1);
                         tvEmptyMessages.setVisibility(View.GONE);
@@ -686,6 +687,7 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
                             View topView = layoutManager.findViewByPosition(firstVisible);
                             int topOffset = (topView != null) ? (topView.getTop() - recyclerViewMessages.getPaddingTop()) : 0;
 
+                            preloadSenderNames(genuinelyOlder);
                             int insertedCount = messageAdapter.prependOlderMessages(genuinelyOlder);
 
                             if (firstVisible != RecyclerView.NO_POSITION && insertedCount > 0) {
@@ -1002,13 +1004,13 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
             activeClient.getUser(userId, result -> {
                 if (result instanceof TdApi.User) {
                     TdApi.User user = (TdApi.User) result;
-                    String name = user.firstName;
-                    if (user.lastName != null && !user.lastName.isEmpty()) {
-                        name = (name == null || name.isEmpty()) ? user.lastName : name + " " + user.lastName;
+                    String name = user.firstName != null ? user.firstName.trim() : "";
+                    if (user.lastName != null && !user.lastName.trim().isEmpty()) {
+                        name = name.isEmpty() ? user.lastName.trim() : name + " " + user.lastName.trim();
                     }
-                    if (name == null || name.isEmpty()) {
+                    if (name.isEmpty()) {
                         name = (user.usernames != null && user.usernames.activeUsernames != null && user.usernames.activeUsernames.length > 0)
-                                ? "@" + user.usernames.activeUsernames[0] : "User";
+                                ? "@" + user.usernames.activeUsernames[0] : (user.phoneNumber != null && !user.phoneNumber.trim().isEmpty() ? "+" + user.phoneNumber.trim() : "User " + userId);
                     }
                     final String finalName = name;
                     runOnUiThread(() -> messageAdapter.setSenderName(userId, finalName));
@@ -1023,6 +1025,15 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
                     runOnUiThread(() -> messageAdapter.setSenderName(senderChatId, title));
                 }
             });
+        }
+    }
+
+    private void preloadSenderNames(List<TdApi.Message> messages) {
+        if (activeClient == null || messages == null) return;
+        for (TdApi.Message m : messages) {
+            if (m != null && m.senderId != null) {
+                onRequestSenderName(m.senderId);
+            }
         }
     }
 
@@ -1414,6 +1425,9 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
             TdApi.UpdateNewMessage updateMsg = (TdApi.UpdateNewMessage) update;
             if (updateMsg.message.chatId == chatId) {
                 runOnUiThread(() -> {
+                    if (updateMsg.message != null && updateMsg.message.senderId != null) {
+                        onRequestSenderName(updateMsg.message.senderId);
+                    }
                     boolean isNearBottom = layoutManager.findLastVisibleItemPosition() >= messageAdapter.getItemCount() - 3;
                     messageAdapter.appendOrUpdateMessage(updateMsg.message);
 

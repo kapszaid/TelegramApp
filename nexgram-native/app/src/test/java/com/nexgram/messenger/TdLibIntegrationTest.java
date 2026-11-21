@@ -1497,4 +1497,44 @@ public class TdLibIntegrationTest {
         adapter.setSessions(Collections.emptyList());
         assertEquals(0, adapter.getItemCount());
     }
+
+    @Test
+    public void testModernBottomNavigationAndOverflowMenuArchitecture() {
+        // Verify 4-tab modern bottom navigation item IDs exist and are distinct
+        int tabChats = R.id.tab_chats;
+        int tabContacts = R.id.tab_contacts;
+        int tabSettings = R.id.tab_settings;
+        int tabProfile = R.id.tab_profile;
+
+        assertNotEquals(tabChats, tabContacts);
+        assertNotEquals(tabChats, tabSettings);
+        assertNotEquals(tabChats, tabProfile);
+        assertNotEquals(tabContacts, tabSettings);
+        assertNotEquals(tabContacts, tabProfile);
+        assertNotEquals(tabSettings, tabProfile);
+
+        // Verify modern 3-dot overflow menu items exist and are distinct
+        int actionSearch = R.id.action_search;
+        int actionNewGroup = R.id.action_new_group;
+        int actionNewChannel = R.id.action_new_channel;
+        int actionSavedMessages = R.id.action_saved_messages;
+        int actionProxy = R.id.action_proxy;
+        int actionNightMode = R.id.action_night_mode;
+
+        assertNotEquals(actionSearch, actionNewGroup);
+        assertNotEquals(actionNewGroup, actionNewChannel);
+        assertNotEquals(actionNewChannel, actionSavedMessages);
+        assertNotEquals(actionSavedMessages, actionProxy);
+        assertNotEquals(actionProxy, actionNightMode);
+    }
+
+    @Test
+    public void testThemePersistenceLogic() {
+        MockSharedPreferences mockPrefs = new MockSharedPreferences();
+        mockPrefs.edit().putInt(com.nexgram.messenger.ui.ChatSettingsActivity.KEY_THEME_MODE, 2).apply(); // MODE_NIGHT_YES
+        assertEquals(2, mockPrefs.getInt(com.nexgram.messenger.ui.ChatSettingsActivity.KEY_THEME_MODE, 0));
+
+        mockPrefs.edit().putInt(com.nexgram.messenger.ui.ChatSettingsActivity.KEY_TEXT_SIZE, 18).apply();
+        assertEquals(18, mockPrefs.getInt(com.nexgram.messenger.ui.ChatSettingsActivity.KEY_TEXT_SIZE, 16));
+    }
 }

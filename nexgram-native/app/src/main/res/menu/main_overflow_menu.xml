@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_search"
+        android:icon="@drawable/ic_search"
+        android:title="Search"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/action_new_group"
+        android:icon="@drawable/ic_nav_group"
+        android:title="New Group"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_new_channel"
+        android:icon="@drawable/ic_nav_channel"
+        android:title="New Channel"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_saved_messages"
+        android:icon="@drawable/ic_nav_saved"
+        android:title="Saved Messages"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_proxy"
+        android:icon="@drawable/ic_shield_proxy"
+        android:title="Proxy Settings"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_night_mode"
+        android:icon="@drawable/ic_nav_moon"
+        android:title="Toggle Night Mode"
+        app:showAsAction="never" />
+</menu>

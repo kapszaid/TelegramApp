@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/tab_chats"
+        android:icon="@drawable/ic_tab_chats"
+        android:title="Chats" />
+    <item
+        android:id="@+id/tab_contacts"
+        android:icon="@drawable/ic_tab_contacts"
+        android:title="Contacts" />
+    <item
+        android:id="@+id/tab_settings"
+        android:icon="@drawable/ic_tab_settings"
+        android:title="Settings" />
+    <item
+        android:id="@+id/tab_profile"
+        android:icon="@drawable/ic_tab_profile"
+        android:title="Profile" />
+</menu>

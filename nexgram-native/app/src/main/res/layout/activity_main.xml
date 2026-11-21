@@ -1,104 +1,103 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/drawerLayout"
+    android:id="@+id/mainCoordinatorLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark">
 
-    <!-- Primary Application Content -->
-    <androidx.coordinatorlayout.widget.CoordinatorLayout
+    <!-- Top App Bar -->
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="wrap_content"
+        android:background="@color/bg_dark_secondary">
 
-        <com.google.android.material.appbar.AppBarLayout
-            android:id="@+id/appBarLayout"
+        <!-- Modern Telegram Main Toolbar -->
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@color/bg_dark_secondary">
+            android:layout_height="?attr/actionBarSize"
+            app:title="@string/app_name"
+            app:titleTextColor="@color/text_primary">
 
-            <!-- Official Telegram-style Main Toolbar -->
-            <androidx.appcompat.widget.Toolbar
-                android:id="@+id/toolbar"
+            <!-- Interactive Search Bar View (Shown when searching) -->
+            <LinearLayout
+                android:id="@+id/layoutSearchBar"
                 android:layout_width="match_parent"
-                android:layout_height="?attr/actionBarSize"
-                app:navigationIcon="@drawable/ic_menu_hamburger"
-                app:title="@string/app_name"
-                app:titleTextColor="@color/text_primary">
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone">
 
-                <!-- Interactive Search Bar View (Shown when searching) -->
-                <LinearLayout
-                    android:id="@+id/layoutSearchBar"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:visibility="gone">
+                <EditText
+                    android:id="@+id/etSearchQuery"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="40dp"
+                    android:background="@null"
+                    android:hint="Search chats..."
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_muted"
+                    android:textSize="16sp"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text" />
 
-                    <EditText
-                        android:id="@+id/etSearchQuery"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
-                        android:layout_height="40dp"
-                        android:background="@null"
-                        android:hint="Search chats..."
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_muted"
-                        android:textSize="16sp"
-                        android:imeOptions="actionSearch"
-                        android:inputType="text" />
+                <ImageView
+                    android:id="@+id/btnCloseSearch"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:padding="8dp"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:contentDescription="Close search"
+                    app:tint="@color/text_secondary" />
+            </LinearLayout>
 
-                    <ImageView
-                        android:id="@+id/btnCloseSearch"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:padding="8dp"
-                        android:src="@android:drawable/ic_menu_close_clear_cancel"
-                        android:contentDescription="Close search"
-                        app:tint="@color/text_secondary" />
-                </LinearLayout>
+        </androidx.appcompat.widget.Toolbar>
 
-            </androidx.appcompat.widget.Toolbar>
+        <!-- Telegram Chat Folder Tabs (Only shown on Chats tab) -->
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tabLayoutFolders"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:background="@color/bg_dark_secondary"
+            app:tabMode="scrollable"
+            app:tabGravity="fill"
+            app:tabIndicatorColor="@color/primary"
+            app:tabIndicatorHeight="3dp"
+            app:tabTextColor="@color/text_secondary"
+            app:tabSelectedTextColor="@color/primary"
+            app:tabTextAppearance="@style/TextAppearance.MaterialComponents.Caption" />
 
-            <!-- Telegram Chat Folder Tabs -->
-            <com.google.android.material.tabs.TabLayout
-                android:id="@+id/tabLayoutFolders"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:background="@color/bg_dark_secondary"
-                app:tabMode="scrollable"
-                app:tabGravity="fill"
-                app:tabIndicatorColor="@color/primary"
-                app:tabIndicatorHeight="3dp"
-                app:tabTextColor="@color/text_secondary"
-                app:tabSelectedTextColor="@color/primary"
-                app:tabTextAppearance="@style/TextAppearance.MaterialComponents.Caption" />
+    </com.google.android.material.appbar.AppBarLayout>
 
-        </com.google.android.material.appbar.AppBarLayout>
+    <!-- Content Area for 4 Bottom Navigation Tabs -->
+    <FrameLayout
+        android:id="@+id/containerMainContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Main Body: Chat List & Status Views -->
+        <!-- TAB 0: CHATS CONTAINER -->
         <FrameLayout
+            android:id="@+id/tabContainerChats"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            app:layout_behavior="@string/appbar_scrolling_view_behavior">
+            android:visibility="visible">
 
-            <!-- Swipe to Refresh Container -->
             <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
                 android:id="@+id/swipeRefreshLayout"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
 
-                <!-- Native Telegram Chat RecyclerView -->
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/recyclerViewChats"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:clipToPadding="false"
-                    android:paddingBottom="80dp" />
-
+                    android:paddingBottom="96dp" />
             </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-            <!-- Loading Progress Indicator -->
             <ProgressBar
                 android:id="@+id/progressBarChats"
                 android:layout_width="48dp"
@@ -108,7 +107,6 @@
                 android:indeterminateTint="@color/primary"
                 android:visibility="gone" />
 
-            <!-- Clean Empty State (Zero Fake Chats) -->
             <LinearLayout
                 android:id="@+id/layoutEmptyState"
                 android:layout_width="match_parent"
@@ -155,34 +153,553 @@
                     android:layout_marginTop="20dp"
                     style="@style/Widget.MaterialComponents.Button" />
             </LinearLayout>
-
         </FrameLayout>
 
-        <!-- Floating Compose Button (Pencil Icon) -->
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-            android:id="@+id/fabNewChat"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:layout_margin="16dp"
-            android:src="@drawable/ic_pencil_compose"
-            app:backgroundTint="@color/primary"
-            app:tint="#FFFFFF"
-            android:contentDescription="New Chat"
-            android:visibility="visible" />
+        <!-- TAB 1: CONTACTS CONTAINER -->
+        <FrameLayout
+            android:id="@+id/tabContainerContacts"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
 
-    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/swipeRefreshContactsMain"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
 
-    <!-- Telegram-Style Navigation Drawer -->
-    <com.google.android.material.navigation.NavigationView
-        android:id="@+id/navigationView"
-        android:layout_width="300dp"
-        android:layout_height="match_parent"
-        android:layout_gravity="start"
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvContactsMain"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:paddingBottom="96dp" />
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+            <ProgressBar
+                android:id="@+id/pbContactsMain"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/primary"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/layoutEmptyContactsMain"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="32dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:src="@drawable/ic_nav_contacts"
+                    app:tint="@color/text_muted"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="No Contacts Found"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Tap the compose button to add contacts on Telegram."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:gravity="center" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- TAB 2: SETTINGS CONTAINER -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/tabContainerSettings"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="96dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Settings Rows Card -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Settings"
+                    android:textColor="@color/primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginBottom="8dp" />
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardBackgroundColor="@color/bg_dark_card"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="0dp"
+                    android:layout_marginBottom="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <!-- Notifications & Sounds -->
+                        <LinearLayout
+                            android:id="@+id/mainRowSettingNotifications"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:gravity="center_vertical"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:background="?android:attr/selectableItemBackground">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_settings_notifications"
+                                android:layout_marginEnd="16dp" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="Notifications and Sounds"
+                                android:textColor="@color/text_primary"
+                                android:textSize="15sp" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/divider" />
+
+                        <!-- Privacy & Security -->
+                        <LinearLayout
+                            android:id="@+id/mainRowSettingPrivacy"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:gravity="center_vertical"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:background="?android:attr/selectableItemBackground">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_settings_privacy"
+                                android:layout_marginEnd="16dp" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="Privacy and Security"
+                                android:textColor="@color/text_primary"
+                                android:textSize="15sp" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/divider" />
+
+                        <!-- Data & Storage -->
+                        <LinearLayout
+                            android:id="@+id/mainRowSettingDataStorage"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:gravity="center_vertical"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:background="?android:attr/selectableItemBackground">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_settings_data"
+                                android:layout_marginEnd="16dp" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="Data and Storage"
+                                android:textColor="@color/text_primary"
+                                android:textSize="15sp" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/divider" />
+
+                        <!-- Chat Settings (Appearance) -->
+                        <LinearLayout
+                            android:id="@+id/mainRowSettingChatSettings"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:gravity="center_vertical"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:background="?android:attr/selectableItemBackground">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_settings_chat"
+                                android:layout_marginEnd="16dp" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="Chat Settings"
+                                android:textColor="@color/text_primary"
+                                android:textSize="15sp" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/divider" />
+
+                        <!-- Devices -->
+                        <LinearLayout
+                            android:id="@+id/mainRowSettingDevices"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:gravity="center_vertical"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:background="?android:attr/selectableItemBackground">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_settings_devices"
+                                android:layout_marginEnd="16dp" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="Devices"
+                                android:textColor="@color/text_primary"
+                                android:textSize="15sp" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/divider" />
+
+                        <!-- Proxy Settings -->
+                        <LinearLayout
+                            android:id="@+id/mainRowSettingProxy"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:gravity="center_vertical"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:background="?android:attr/selectableItemBackground">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_shield_proxy"
+                                android:layout_marginEnd="16dp" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Proxy Settings"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/tvMainProxyStatus"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/proxy_disabled"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="12sp"
+                                    android:singleLine="true" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <!-- Help & About Card -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="About"
+                    android:textColor="@color/primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginBottom="8dp" />
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardBackgroundColor="@color/bg_dark_card"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="0dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="NexGram for Android"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Version 1.0.0 • TDLib 1.8.70 Native MTProto"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <!-- TAB 3: PROFILE & MULTI-ACCOUNT CONTAINER -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/tabContainerProfile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="96dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Profile Header Card -->
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardBackgroundColor="@color/bg_dark_card"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="0dp"
+                    android:layout_marginBottom="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="20dp">
+
+                        <FrameLayout
+                            android:layout_width="84dp"
+                            android:layout_height="84dp"
+                            android:layout_marginBottom="12dp">
+
+                            <ImageView
+                                android:id="@+id/ivTabProfileAvatarCircle"
+                                android:layout_width="84dp"
+                                android:layout_height="84dp"
+                                android:src="@drawable/circle_avatar" />
+
+                            <TextView
+                                android:id="@+id/tvTabProfileAvatarInitials"
+                                android:layout_width="84dp"
+                                android:layout_height="84dp"
+                                android:gravity="center"
+                                android:text="TG"
+                                android:textColor="#FFFFFF"
+                                android:textSize="28sp"
+                                android:textStyle="bold" />
+
+                            <ImageView
+                                android:id="@+id/ivTabProfileAvatarPhoto"
+                                android:layout_width="84dp"
+                                android:layout_height="84dp"
+                                android:scaleType="centerCrop"
+                                android:visibility="gone" />
+                        </FrameLayout>
+
+                        <TextView
+                            android:id="@+id/tvTabProfileName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Telegram User"
+                            android:textColor="@color/text_primary"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            android:layout_marginBottom="2dp" />
+
+                        <TextView
+                            android:id="@+id/tvTabProfilePhone"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="+1 234 567 8900"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp"
+                            android:layout_marginBottom="2dp" />
+
+                        <TextView
+                            android:id="@+id/tvTabProfileUsername"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@username"
+                            android:textColor="@color/primary"
+                            android:textSize="13sp"
+                            android:layout_marginBottom="12dp" />
+
+                        <Button
+                            android:id="@+id/btnTabProfileEdit"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:text="Edit Profile"
+                            android:textColor="@color/primary"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            app:strokeColor="@color/primary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <!-- Multi-Account Management Section Card -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Switch Accounts"
+                    android:textColor="@color/primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginBottom="8dp" />
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardBackgroundColor="@color/bg_dark_card"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="0dp"
+                    android:layout_marginBottom="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <androidx.recyclerview.widget.RecyclerView
+                            android:id="@+id/rvTabProfileAccounts"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:nestedScrollingEnabled="false" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/divider" />
+
+                        <LinearLayout
+                            android:id="@+id/btnTabProfileAddAccount"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:gravity="center_vertical"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:background="?android:attr/selectableItemBackground">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_plus_circle"
+                                android:layout_marginEnd="16dp"
+                                app:tint="@color/primary" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="Add Another Account"
+                                android:textColor="@color/primary"
+                                android:textSize="15sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <!-- Logout Active Account Button -->
+                <Button
+                    android:id="@+id/btnTabProfileLogout"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="Log Out Current Account"
+                    android:textColor="@color/danger_red"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    app:strokeColor="@color/danger_red"
+                    android:layout_marginBottom="24dp" />
+
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+    </FrameLayout>
+
+    <!-- Floating Compose Button (Pencil Icon) -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabNewChat"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="80dp"
+        android:src="@drawable/ic_pencil_compose"
+        app:backgroundTint="@color/primary"
+        app:tint="#FFFFFF"
+        android:contentDescription="New Chat"
+        android:visibility="visible" />
+
+    <!-- Modern 4-Tab Bottom Navigation Bar -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNavMain"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_gravity="bottom"
         android:background="@color/bg_dark_secondary"
-        app:headerLayout="@layout/nav_header_main"
-        app:menu="@menu/drawer_menu"
-        app:itemIconTint="@color/text_secondary"
-        app:itemTextColor="@color/text_primary" />
+        app:itemIconTint="@color/bottom_nav_color_selector"
+        app:itemTextColor="@color/bottom_nav_color_selector"
+        app:itemRippleColor="#1A2AABEE"
+        app:labelVisibilityMode="labeled"
+        app:elevation="8dp"
+        app:menu="@menu/bottom_nav_menu" />
 
-</androidx.drawerlayout.widget.DrawerLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
