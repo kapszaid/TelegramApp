@@ -26,6 +26,11 @@ public class NexGramApplication extends Application {
 
         Log.i(TAG, "Initializing NexGram Native Client...");
 
+        // Apply saved theme mode
+        android.content.SharedPreferences themePrefs = getSharedPreferences(com.nexgram.messenger.ui.ChatSettingsActivity.PREFS_NAME, MODE_PRIVATE);
+        int themeMode = themePrefs.getInt(com.nexgram.messenger.ui.ChatSettingsActivity.KEY_THEME_MODE, androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(themeMode);
+
         try {
             // 1. Initialize hardware-backed session vault via Android Keystore
             sessionVault = new SecureSessionVault(this);

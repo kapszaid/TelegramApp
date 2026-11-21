@@ -879,4 +879,82 @@ public class TdLibAccountClient {
     public void setChatMemberStatus(long chatId, TdApi.MessageSender memberId, TdApi.ChatMemberStatus status, Client.ResultHandler handler) {
         send(new TdApi.SetChatMemberStatus(chatId, memberId, status), handler);
     }
+
+    /**
+     * Updates user's first and last name on Telegram.
+     */
+    public void setName(String firstName, String lastName, Client.ResultHandler handler) {
+        send(new TdApi.SetName(firstName, lastName != null ? lastName : ""), handler);
+    }
+
+    /**
+     * Updates user's public username on Telegram.
+     */
+    public void setUsername(String username, Client.ResultHandler handler) {
+        send(new TdApi.SetUsername(username != null ? username : ""), handler);
+    }
+
+    /**
+     * Updates user's bio on Telegram.
+     */
+    public void setBio(String bio, Client.ResultHandler handler) {
+        send(new TdApi.SetBio(bio != null ? bio : ""), handler);
+    }
+
+    /**
+     * Changes profile photo via local file.
+     */
+    public void setProfilePhoto(String filePath, Client.ResultHandler handler) {
+        TdApi.InputFile photo = new TdApi.InputFileLocal(filePath);
+        send(new TdApi.SetProfilePhoto(new TdApi.InputChatPhotoStatic(photo), false), handler);
+    }
+
+    /**
+     * Retrieves active Telegram sessions.
+     */
+    public void getActiveSessions(Client.ResultHandler handler) {
+        send(new TdApi.GetActiveSessions(), handler);
+    }
+
+    /**
+     * Terminates an individual active Telegram session.
+     */
+    public void terminateSession(long sessionId, Client.ResultHandler handler) {
+        send(new TdApi.TerminateSession(sessionId), handler);
+    }
+
+    /**
+     * Terminates all other active Telegram sessions.
+     */
+    public void terminateAllOtherSessions(Client.ResultHandler handler) {
+        send(new TdApi.TerminateAllOtherSessions(), handler);
+    }
+
+    /**
+     * Retrieves user privacy rules for a specific setting.
+     */
+    public void getUserPrivacySettingRules(TdApi.UserPrivacySetting setting, Client.ResultHandler handler) {
+        send(new TdApi.GetUserPrivacySettingRules(setting), handler);
+    }
+
+    /**
+     * Sets user privacy rules for a specific setting.
+     */
+    public void setUserPrivacySettingRules(TdApi.UserPrivacySetting setting, TdApi.UserPrivacySettingRules rules, Client.ResultHandler handler) {
+        send(new TdApi.SetUserPrivacySettingRules(setting, rules), handler);
+    }
+
+    /**
+     * Retrieves scope notification settings.
+     */
+    public void getScopeNotificationSettings(TdApi.NotificationSettingsScope scope, Client.ResultHandler handler) {
+        send(new TdApi.GetScopeNotificationSettings(scope), handler);
+    }
+
+    /**
+     * Updates scope notification settings.
+     */
+    public void setScopeNotificationSettings(TdApi.NotificationSettingsScope scope, TdApi.ScopeNotificationSettings settings, Client.ResultHandler handler) {
+        send(new TdApi.SetScopeNotificationSettings(scope, settings), handler);
+    }
 }

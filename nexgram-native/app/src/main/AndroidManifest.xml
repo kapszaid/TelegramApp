@@ -76,6 +76,36 @@
             android:name=".ui.ChatProfileActivity"
             android:exported="false" />
 
+        <!-- User Profile & Edit Screen -->
+        <activity
+            android:name=".ui.ProfileActivity"
+            android:exported="false" />
+
+        <!-- Notifications & Sounds Settings Screen -->
+        <activity
+            android:name=".ui.NotificationsSettingsActivity"
+            android:exported="false" />
+
+        <!-- Privacy & Security Settings Screen -->
+        <activity
+            android:name=".ui.PrivacySettingsActivity"
+            android:exported="false" />
+
+        <!-- Devices & Active Sessions Screen -->
+        <activity
+            android:name=".ui.DevicesActivity"
+            android:exported="false" />
+
+        <!-- Data & Storage Settings Screen -->
+        <activity
+            android:name=".ui.DataStorageActivity"
+            android:exported="false" />
+
+        <!-- Chat Settings & Appearance Screen -->
+        <activity
+            android:name=".ui.ChatSettingsActivity"
+            android:exported="false" />
+
         <!-- Secure File Provider for Document and Media Sharing -->
         <provider
             android:name="androidx.core.content.FileProvider"

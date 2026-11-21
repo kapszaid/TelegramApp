@@ -1376,4 +1376,125 @@ public class TdLibIntegrationTest {
         adapter.clearSelection();
         assertEquals(0, adapter.getSelectedUserIds().size());
     }
+
+    @Test
+    public void testProfileManagementConstructors() {
+        TdApi.GetMe getMe = new TdApi.GetMe();
+        assertEquals(TdApi.GetMe.CONSTRUCTOR, getMe.getConstructor());
+
+        TdApi.SetName setName = new TdApi.SetName("Alice", "Wonderland");
+        assertEquals(TdApi.SetName.CONSTRUCTOR, setName.getConstructor());
+        assertEquals("Alice", setName.firstName);
+        assertEquals("Wonderland", setName.lastName);
+
+        TdApi.SetUsername setUsername = new TdApi.SetUsername("alice_tg");
+        assertEquals(TdApi.SetUsername.CONSTRUCTOR, setUsername.getConstructor());
+        assertEquals("alice_tg", setUsername.username);
+
+        TdApi.SetBio setBio = new TdApi.SetBio("Developer exploring TDLib native");
+        assertEquals(TdApi.SetBio.CONSTRUCTOR, setBio.getConstructor());
+        assertEquals("Developer exploring TDLib native", setBio.bio);
+
+        TdApi.InputFile photoFile = new TdApi.InputFileLocal("/sdcard/photo.jpg");
+        TdApi.InputChatPhotoStatic inputPhoto = new TdApi.InputChatPhotoStatic(photoFile);
+        assertEquals(TdApi.InputChatPhotoStatic.CONSTRUCTOR, inputPhoto.getConstructor());
+
+        TdApi.SetProfilePhoto setPhoto = new TdApi.SetProfilePhoto(inputPhoto, false);
+        assertEquals(TdApi.SetProfilePhoto.CONSTRUCTOR, setPhoto.getConstructor());
+        assertFalse(setPhoto.isPublic);
+    }
+
+    @Test
+    public void testActiveSessionsConstructors() {
+        TdApi.GetActiveSessions getSessions = new TdApi.GetActiveSessions();
+        assertEquals(TdApi.GetActiveSessions.CONSTRUCTOR, getSessions.getConstructor());
+
+        TdApi.TerminateSession termSession = new TdApi.TerminateSession(123456789L);
+        assertEquals(TdApi.TerminateSession.CONSTRUCTOR, termSession.getConstructor());
+        assertEquals(123456789L, termSession.sessionId);
+
+        TdApi.TerminateAllOtherSessions termAll = new TdApi.TerminateAllOtherSessions();
+        assertEquals(TdApi.TerminateAllOtherSessions.CONSTRUCTOR, termAll.getConstructor());
+
+        TdApi.Session session = new TdApi.Session();
+        session.id = 99999L;
+        session.deviceModel = "Samsung Galaxy M14";
+        session.platform = "Android";
+        session.applicationName = "NexGram";
+        session.applicationVersion = "1.0.0";
+        session.ipAddress = "192.168.1.1";
+        session.location = "Mumbai, India";
+        session.isCurrent = true;
+
+        assertEquals(99999L, session.id);
+        assertTrue(session.isCurrent);
+        assertEquals("Samsung Galaxy M14", session.deviceModel);
+    }
+
+    @Test
+    public void testPrivacySettingsConstructors() {
+        TdApi.UserPrivacySettingShowStatus statusSetting = new TdApi.UserPrivacySettingShowStatus();
+        assertEquals(TdApi.UserPrivacySettingShowStatus.CONSTRUCTOR, statusSetting.getConstructor());
+
+        TdApi.UserPrivacySettingShowPhoneNumber phoneSetting = new TdApi.UserPrivacySettingShowPhoneNumber();
+        assertEquals(TdApi.UserPrivacySettingShowPhoneNumber.CONSTRUCTOR, phoneSetting.getConstructor());
+
+        TdApi.UserPrivacySettingRule[] rules = new TdApi.UserPrivacySettingRule[]{
+                new TdApi.UserPrivacySettingRuleAllowContacts()
+        };
+        TdApi.UserPrivacySettingRules rulesObj = new TdApi.UserPrivacySettingRules(rules);
+        assertEquals(TdApi.UserPrivacySettingRules.CONSTRUCTOR, rulesObj.getConstructor());
+        assertEquals(1, rulesObj.rules.length);
+
+        TdApi.SetUserPrivacySettingRules setRules = new TdApi.SetUserPrivacySettingRules(statusSetting, rulesObj);
+        assertEquals(TdApi.SetUserPrivacySettingRules.CONSTRUCTOR, setRules.getConstructor());
+        assertEquals(statusSetting, setRules.setting);
+        assertEquals(rulesObj, setRules.rules);
+    }
+
+    @Test
+    public void testScopeNotificationSettingsConstructors() {
+        TdApi.NotificationSettingsScopePrivateChats privateScope = new TdApi.NotificationSettingsScopePrivateChats();
+        assertEquals(TdApi.NotificationSettingsScopePrivateChats.CONSTRUCTOR, privateScope.getConstructor());
+
+        TdApi.NotificationSettingsScopeGroupChats groupScope = new TdApi.NotificationSettingsScopeGroupChats();
+        assertEquals(TdApi.NotificationSettingsScopeGroupChats.CONSTRUCTOR, groupScope.getConstructor());
+
+        TdApi.NotificationSettingsScopeChannelChats channelScope = new TdApi.NotificationSettingsScopeChannelChats();
+        assertEquals(TdApi.NotificationSettingsScopeChannelChats.CONSTRUCTOR, channelScope.getConstructor());
+
+        TdApi.ScopeNotificationSettings settings = new TdApi.ScopeNotificationSettings(
+                0, 0, true, false, false, 0, false, false, false
+        );
+        assertEquals(TdApi.ScopeNotificationSettings.CONSTRUCTOR, settings.getConstructor());
+        assertEquals(0, settings.muteFor);
+        assertTrue(settings.showPreview);
+
+        TdApi.SetScopeNotificationSettings setScope = new TdApi.SetScopeNotificationSettings(privateScope, settings);
+        assertEquals(TdApi.SetScopeNotificationSettings.CONSTRUCTOR, setScope.getConstructor());
+        assertEquals(privateScope, setScope.scope);
+        assertEquals(settings, setScope.notificationSettings);
+    }
+
+    @Test
+    public void testDeviceSessionAdapterData() {
+        com.nexgram.messenger.ui.adapter.DeviceSessionAdapter adapter =
+                new com.nexgram.messenger.ui.adapter.DeviceSessionAdapter(null, null);
+
+        assertEquals(0, adapter.getItemCount());
+
+        TdApi.Session s1 = new TdApi.Session();
+        s1.id = 1L;
+        s1.deviceModel = "Pixel 8";
+
+        TdApi.Session s2 = new TdApi.Session();
+        s2.id = 2L;
+        s2.deviceModel = "Telegram Desktop";
+
+        adapter.setSessions(Arrays.asList(s1, s2));
+        assertEquals(2, adapter.getItemCount());
+
+        adapter.setSessions(Collections.emptyList());
+        assertEquals(0, adapter.getItemCount());
+    }
 }
