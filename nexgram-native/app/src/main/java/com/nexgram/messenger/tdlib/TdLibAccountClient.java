@@ -449,6 +449,111 @@ public class TdLibAccountClient {
         send(new TdApi.DeleteMessages(chatId, messageIds, revoke), handler);
     }
 
+    /**
+     * Retrieves all contacts of the current user.
+     */
+    public void getContacts(Client.ResultHandler handler) {
+        send(new TdApi.GetContacts(), handler);
+    }
+
+    /**
+     * Searches for contacts by name/username.
+     */
+    public void searchContacts(String query, int limit, Client.ResultHandler handler) {
+        send(new TdApi.SearchContacts(query, limit), handler);
+    }
+
+    /**
+     * Retrieves user object by ID.
+     */
+    public void getUser(long userId, Client.ResultHandler handler) {
+        send(new TdApi.GetUser(userId), handler);
+    }
+
+    /**
+     * Retrieves full user info (bio, profile photos, etc.).
+     */
+    public void getUserFullInfo(long userId, Client.ResultHandler handler) {
+        send(new TdApi.GetUserFullInfo(userId), handler);
+    }
+
+    /**
+     * Creates or retrieves a 1-on-1 private chat with a contact.
+     */
+    public void createPrivateChat(long userId, Client.ResultHandler handler) {
+        send(new TdApi.CreatePrivateChat(userId, false), handler);
+    }
+
+    /**
+     * Creates a new basic Telegram group with selected members.
+     */
+    public void createNewBasicGroup(long[] userIds, String title, Client.ResultHandler handler) {
+        send(new TdApi.CreateNewBasicGroupChat(userIds, title, 0), handler);
+    }
+
+    /**
+     * Creates a new supergroup (broadcast channel or high-capacity supergroup).
+     */
+    public void createNewSupergroupOrChannel(String title, boolean isChannel, String description, Client.ResultHandler handler) {
+        send(new TdApi.CreateNewSupergroupChat(title, false, isChannel, description, null, 0, false), handler);
+    }
+
+    /**
+     * Adds a user to a basic group or supergroup chat.
+     */
+    public void addChatMember(long chatId, long userId, Client.ResultHandler handler) {
+        send(new TdApi.AddChatMember(chatId, userId, 0), handler);
+    }
+
+    /**
+     * Removes/bans a user from a chat.
+     */
+    public void removeChatMember(long chatId, long userId, Client.ResultHandler handler) {
+        send(new TdApi.SetChatMemberStatus(chatId, new TdApi.MessageSenderUser(userId), new TdApi.ChatMemberStatusBanned(0)), handler);
+    }
+
+    /**
+     * Retrieves detailed basic group information.
+     */
+    public void getBasicGroupFullInfo(long basicGroupId, Client.ResultHandler handler) {
+        send(new TdApi.GetBasicGroupFullInfo(basicGroupId), handler);
+    }
+
+    /**
+     * Retrieves detailed supergroup/channel information.
+     */
+    public void getSupergroupFullInfo(long supergroupId, Client.ResultHandler handler) {
+        send(new TdApi.GetSupergroupFullInfo(supergroupId), handler);
+    }
+
+    /**
+     * Retrieves supergroup/channel member list.
+     */
+    public void getSupergroupMembers(long supergroupId, TdApi.SupergroupMembersFilter filter, int offset, int limit, Client.ResultHandler handler) {
+        send(new TdApi.GetSupergroupMembers(supergroupId, filter, offset, limit), handler);
+    }
+
+    /**
+     * Creates a new primary or secondary chat invite link.
+     */
+    public void createChatInviteLink(long chatId, String name, Client.ResultHandler handler) {
+        send(new TdApi.CreateChatInviteLink(chatId, name, 0, 0, false), handler);
+    }
+
+    /**
+     * Joins a chat using an invite link (e.g. t.me/+... or t.me/joinchat/...).
+     */
+    public void joinChatByInviteLink(String inviteLink, Client.ResultHandler handler) {
+        send(new TdApi.JoinChatByInviteLink(inviteLink), handler);
+    }
+
+    /**
+     * Searches for public channels, groups, and bots across Telegram.
+     */
+    public void searchPublicChats(String query, Client.ResultHandler handler) {
+        send(new TdApi.SearchPublicChats(query, null), handler);
+    }
+
     private void updateChatPositionInternal(TdApi.Chat chat, TdApi.ChatPosition newPos) {
         if (chat == null || newPos == null) return;
         if (chat.positions == null) {
@@ -762,9 +867,16 @@ public class TdLibAccountClient {
     }
 
     /**
-     * Retrieves user details.
+     * Leaves a group or channel.
      */
-    public void getUser(long userId, Client.ResultHandler handler) {
-        send(new TdApi.GetUser(userId), handler);
+    public void leaveChat(long chatId, Client.ResultHandler handler) {
+        send(new TdApi.LeaveChat(chatId), handler);
+    }
+
+    /**
+     * Changes the status of a chat member (e.g. promote, restrict, ban).
+     */
+    public void setChatMemberStatus(long chatId, TdApi.MessageSender memberId, TdApi.ChatMemberStatus status, Client.ResultHandler handler) {
+        send(new TdApi.SetChatMemberStatus(chatId, memberId, status), handler);
     }
 }

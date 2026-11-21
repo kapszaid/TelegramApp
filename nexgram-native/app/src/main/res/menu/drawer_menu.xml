@@ -6,6 +6,10 @@
             android:icon="@drawable/ic_nav_group"
             android:title="New Group" />
         <item
+            android:id="@+id/nav_new_channel"
+            android:icon="@drawable/ic_nav_channel"
+            android:title="New Channel" />
+        <item
             android:id="@+id/nav_contacts"
             android:icon="@drawable/ic_nav_contacts"
             android:title="Contacts" />

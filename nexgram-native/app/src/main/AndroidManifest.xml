@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
 
     <application
         android:name=".NexGramApplication"
@@ -53,6 +55,26 @@
             android:name=".ui.MediaViewerActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize" />
+
+        <!-- Telegram Contacts Screen -->
+        <activity
+            android:name=".ui.ContactsActivity"
+            android:exported="false" />
+
+        <!-- New Telegram Group Creation Screen -->
+        <activity
+            android:name=".ui.NewGroupActivity"
+            android:exported="false" />
+
+        <!-- New Telegram Channel Creation Screen -->
+        <activity
+            android:name=".ui.NewChannelActivity"
+            android:exported="false" />
+
+        <!-- Telegram Chat Profile (Group / Channel / User) Screen -->
+        <activity
+            android:name=".ui.ChatProfileActivity"
+            android:exported="false" />
 
         <!-- Secure File Provider for Document and Media Sharing -->
         <provider

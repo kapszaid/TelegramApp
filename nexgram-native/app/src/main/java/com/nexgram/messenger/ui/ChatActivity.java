@@ -313,6 +313,25 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
         } else {
             tvChatSubtitle.setText("online");
         }
+
+        View.OnClickListener openProfileListener = v -> {
+            Intent intent = new Intent(ChatActivity.this, ChatProfileActivity.class);
+            intent.putExtra("chat_id", chatId);
+            intent.putExtra("chat_title", chatTitle);
+            String accId = getIntent().getStringExtra("account_id");
+            if (accId != null && !accId.isEmpty()) {
+                intent.putExtra("account_id", accId);
+            } else if (activeClient != null) {
+                intent.putExtra("account_id", activeClient.getAccountId());
+            }
+            startActivity(intent);
+        };
+        tvChatTitle.setOnClickListener(openProfileListener);
+        tvChatSubtitle.setOnClickListener(openProfileListener);
+        View flAvatar = findViewById(R.id.flChatAvatar);
+        if (flAvatar != null) {
+            flAvatar.setOnClickListener(openProfileListener);
+        }
     }
 
     private void setupSelectionToolbar() {

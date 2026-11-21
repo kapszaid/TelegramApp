@@ -1,5 +1,6 @@
 package com.nexgram.messenger;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -1226,5 +1227,153 @@ public class TdLibIntegrationTest {
         com.nexgram.messenger.proxy.ProxyController.ProxyMetadata alphaStillActive = proxy.getProxyMetadata("account_alpha");
         assertNotNull(alphaStillActive);
         assertEquals("104.252.129.67", alphaStillActive.host);
+    }
+
+    @Test
+    public void testContactsFunctionsConstructors() {
+        TdApi.GetContacts getContacts = new TdApi.GetContacts();
+        assertEquals(TdApi.GetContacts.CONSTRUCTOR, getContacts.getConstructor());
+
+        TdApi.SearchContacts searchContacts = new TdApi.SearchContacts("John", 25);
+        assertEquals(TdApi.SearchContacts.CONSTRUCTOR, searchContacts.getConstructor());
+        assertEquals("John", searchContacts.query);
+        assertEquals(25, searchContacts.limit);
+
+        TdApi.CreatePrivateChat createPrivate = new TdApi.CreatePrivateChat(987654321L, false);
+        assertEquals(TdApi.CreatePrivateChat.CONSTRUCTOR, createPrivate.getConstructor());
+        assertEquals(987654321L, createPrivate.userId);
+        assertFalse(createPrivate.force);
+
+        TdApi.Contact contact = new TdApi.Contact("+1234567890", "Alice", "Smith", "", 11223344L);
+        assertEquals(TdApi.Contact.CONSTRUCTOR, contact.getConstructor());
+        assertEquals("+1234567890", contact.phoneNumber);
+        assertEquals("Alice", contact.firstName);
+        assertEquals("Smith", contact.lastName);
+
+        TdApi.ImportedContact importedContact = new TdApi.ImportedContact("+1234567890", "Alice", "Smith", null);
+        assertEquals(TdApi.ImportedContact.CONSTRUCTOR, importedContact.getConstructor());
+        TdApi.ImportContacts importContacts = new TdApi.ImportContacts(new TdApi.ImportedContact[]{importedContact});
+        assertEquals(TdApi.ImportContacts.CONSTRUCTOR, importContacts.getConstructor());
+        assertEquals(1, importContacts.contacts.length);
+    }
+
+    @Test
+    public void testGroupAndChannelCreationConstructors() {
+        long[] members = new long[]{101L, 102L, 103L};
+        TdApi.CreateNewBasicGroupChat createGroup = new TdApi.CreateNewBasicGroupChat(members, "NexGram Dev Group", 0);
+        assertEquals(TdApi.CreateNewBasicGroupChat.CONSTRUCTOR, createGroup.getConstructor());
+        assertArrayEquals(members, createGroup.userIds);
+        assertEquals("NexGram Dev Group", createGroup.title);
+
+        TdApi.CreateNewSupergroupChat createChannel = new TdApi.CreateNewSupergroupChat(
+                "NexGram News Channel",
+                false, // isForum
+                true,  // isChannel
+                "Official announcements channel",
+                null,
+                0,
+                false
+        );
+        assertEquals(TdApi.CreateNewSupergroupChat.CONSTRUCTOR, createChannel.getConstructor());
+        assertEquals("NexGram News Channel", createChannel.title);
+        assertTrue(createChannel.isChannel);
+        assertFalse(createChannel.isForum);
+        assertEquals("Official announcements channel", createChannel.description);
+
+        TdApi.SetSupergroupUsername setUsername = new TdApi.SetSupergroupUsername(998877L, "nexgram_news");
+        assertEquals(TdApi.SetSupergroupUsername.CONSTRUCTOR, setUsername.getConstructor());
+        assertEquals(998877L, setUsername.supergroupId);
+        assertEquals("nexgram_news", setUsername.username);
+    }
+
+    @Test
+    public void testGroupMemberManagementAndFullInfoConstructors() {
+        TdApi.AddChatMember addMember = new TdApi.AddChatMember(-100123456L, 555666L, 0);
+        assertEquals(TdApi.AddChatMember.CONSTRUCTOR, addMember.getConstructor());
+        assertEquals(-100123456L, addMember.chatId);
+        assertEquals(555666L, addMember.userId);
+
+        TdApi.SetChatMemberStatus banMember = new TdApi.SetChatMemberStatus(
+                -100123456L,
+                new TdApi.MessageSenderUser(555666L),
+                new TdApi.ChatMemberStatusBanned(0)
+        );
+        assertEquals(TdApi.SetChatMemberStatus.CONSTRUCTOR, banMember.getConstructor());
+        assertEquals(-100123456L, banMember.chatId);
+        assertTrue(banMember.status instanceof TdApi.ChatMemberStatusBanned);
+
+        TdApi.LeaveChat leaveChat = new TdApi.LeaveChat(-100123456L);
+        assertEquals(TdApi.LeaveChat.CONSTRUCTOR, leaveChat.getConstructor());
+        assertEquals(-100123456L, leaveChat.chatId);
+
+        TdApi.GetBasicGroupFullInfo getBasicInfo = new TdApi.GetBasicGroupFullInfo(12345L);
+        assertEquals(TdApi.GetBasicGroupFullInfo.CONSTRUCTOR, getBasicInfo.getConstructor());
+        assertEquals(12345L, getBasicInfo.basicGroupId);
+
+        TdApi.GetSupergroupFullInfo getSuperInfo = new TdApi.GetSupergroupFullInfo(67890L);
+        assertEquals(TdApi.GetSupergroupFullInfo.CONSTRUCTOR, getSuperInfo.getConstructor());
+        assertEquals(67890L, getSuperInfo.supergroupId);
+
+        TdApi.GetSupergroupMembers getMembers = new TdApi.GetSupergroupMembers(67890L, new TdApi.SupergroupMembersFilterRecent(), 0, 50);
+        assertEquals(TdApi.GetSupergroupMembers.CONSTRUCTOR, getMembers.getConstructor());
+        assertEquals(67890L, getMembers.supergroupId);
+        assertEquals(50, getMembers.limit);
+    }
+
+    @Test
+    public void testInviteLinksAndPublicSearchConstructors() {
+        TdApi.CreateChatInviteLink createLink = new TdApi.CreateChatInviteLink(-100123456L, "Group Invite", 0, 0, false);
+        assertEquals(TdApi.CreateChatInviteLink.CONSTRUCTOR, createLink.getConstructor());
+        assertEquals(-100123456L, createLink.chatId);
+        assertEquals("Group Invite", createLink.name);
+
+        TdApi.JoinChatByInviteLink joinLink = new TdApi.JoinChatByInviteLink("https://t.me/+AbCdEfGhIjK");
+        assertEquals(TdApi.JoinChatByInviteLink.CONSTRUCTOR, joinLink.getConstructor());
+        assertEquals("https://t.me/+AbCdEfGhIjK", joinLink.inviteLink);
+
+        TdApi.SearchPublicChats searchPublic = new TdApi.SearchPublicChats("telegram", null);
+        assertEquals(TdApi.SearchPublicChats.CONSTRUCTOR, searchPublic.getConstructor());
+        assertEquals("telegram", searchPublic.query);
+    }
+
+    @Test
+    public void testContactAdapterSelectionState() {
+        com.nexgram.messenger.ui.adapter.ContactAdapter adapter = new com.nexgram.messenger.ui.adapter.ContactAdapter(null, true);
+        assertTrue(adapter.isPickerMode());
+
+        TdApi.User user1 = new TdApi.User();
+        user1.id = 101L;
+        user1.firstName = "Bob";
+
+        TdApi.User user2 = new TdApi.User();
+        user2.id = 102L;
+        user2.firstName = "Charlie";
+
+        adapter.setUsers(Arrays.asList(user1, user2));
+        assertEquals(2, adapter.getItemCount());
+        assertEquals(0, adapter.getSelectedUserIds().size());
+
+        // Toggle user 1
+        adapter.toggleSelection(101L);
+        assertTrue(adapter.isUserSelected(101L));
+        assertFalse(adapter.isUserSelected(102L));
+        assertEquals(1, adapter.getSelectedUserIds().size());
+        assertTrue(adapter.getSelectedUserIds().contains(101L));
+
+        // Toggle user 2
+        adapter.toggleSelection(102L);
+        assertTrue(adapter.isUserSelected(101L));
+        assertTrue(adapter.isUserSelected(102L));
+        assertEquals(2, adapter.getSelectedUserIds().size());
+
+        // Un-toggle user 1
+        adapter.toggleSelection(101L);
+        assertFalse(adapter.isUserSelected(101L));
+        assertTrue(adapter.isUserSelected(102L));
+        assertEquals(1, adapter.getSelectedUserIds().size());
+
+        // Clear selection
+        adapter.clearSelection();
+        assertEquals(0, adapter.getSelectedUserIds().size());
     }
 }

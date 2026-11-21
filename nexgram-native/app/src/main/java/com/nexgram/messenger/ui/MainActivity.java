@@ -145,7 +145,13 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         });
 
         fabNewChat.setOnClickListener(v -> {
-            Toast.makeText(this, "Compose new message (Contacts integration)", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(MainActivity.this, ContactsActivity.class);
+            AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+            AccountManager.AccountItem active = manager != null ? manager.getActiveAccount() : null;
+            if (active != null) {
+                intent.putExtra("account_id", active.id);
+            }
+            startActivity(intent);
         });
 
         swipeRefreshLayout.setColorSchemeColors(getColor(R.color.primary));
@@ -385,6 +391,16 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
 
                 if (!currentSearchQuery.isEmpty() && activeClient != null) {
                     activeClient.searchChats(currentSearchQuery, 20, result -> {
+                        if (result instanceof TdApi.Chats) {
+                            long[] ids = ((TdApi.Chats) result).chatIds;
+                            for (long id : ids) {
+                                if (!allChatsMap.containsKey(id)) {
+                                    activeClient.getChat(id, null);
+                                }
+                            }
+                        }
+                    });
+                    activeClient.searchPublicChats(currentSearchQuery, result -> {
                         if (result instanceof TdApi.Chats) {
                             long[] ids = ((TdApi.Chats) result).chatIds;
                             for (long id : ids) {
@@ -835,16 +851,29 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         int id = item.getItemId();
         drawerLayout.closeDrawer(GravityCompat.START);
 
+        AccountManager manager = NexGramApplication.getInstance().getAccountManager();
+        AccountManager.AccountItem active = manager != null ? manager.getActiveAccount() : null;
+        String activeId = active != null ? active.id : null;
+
         if (id == R.id.nav_settings) {
             startActivity(new Intent(this, SettingsActivity.class));
         } else if (id == R.id.nav_saved) {
             Intent intent = new Intent(this, ChatActivity.class);
             intent.putExtra("chat_title", "Saved Messages");
+            if (activeId != null) intent.putExtra("account_id", activeId);
             startActivity(intent);
         } else if (id == R.id.nav_new_group) {
-            Toast.makeText(this, "New Group (Contacts integration)", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(this, NewGroupActivity.class);
+            if (activeId != null) intent.putExtra("account_id", activeId);
+            startActivity(intent);
+        } else if (id == R.id.nav_new_channel) {
+            Intent intent = new Intent(this, NewChannelActivity.class);
+            if (activeId != null) intent.putExtra("account_id", activeId);
+            startActivity(intent);
         } else if (id == R.id.nav_contacts) {
-            Toast.makeText(this, "Telegram Contacts", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(this, ContactsActivity.class);
+            if (activeId != null) intent.putExtra("account_id", activeId);
+            startActivity(intent);
         } else if (id == R.id.nav_calls) {
             Toast.makeText(this, "Calls history", Toast.LENGTH_SHORT).show();
         } else if (id == R.id.nav_night_mode) {
