@@ -11,6 +11,7 @@ import com.nexgram.messenger.auth.SecureSessionVault;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -509,5 +510,190 @@ public class TdLibIntegrationTest {
         assertEquals(1, adapter.getMessageCount());
         assertTrue(adapter.containsMessage(2001L));
         assertFalse(adapter.containsMessage(2002L));
+    }
+
+    @Test
+    public void testMessageReplyRequestConstructionAndAdapterBinding() {
+        // 1. TDLib InputMessageReplyToMessage construction
+        long originalMessageId = 123456789L;
+        TdApi.InputMessageReplyToMessage replyTo = new TdApi.InputMessageReplyToMessage(originalMessageId, null, 0, null);
+        assertEquals(TdApi.InputMessageReplyToMessage.CONSTRUCTOR, replyTo.getConstructor());
+        assertEquals(originalMessageId, replyTo.messageId);
+
+        // 2. TDLib SendMessage with replyTo parameter
+        TdApi.FormattedText text = new TdApi.FormattedText("This is a reply", new TdApi.TextEntity[0]);
+        TdApi.InputMessageText inputContent = new TdApi.InputMessageText(text, null, true);
+        TdApi.SendMessage sendReply = new TdApi.SendMessage(777000L, null, replyTo, null, null, inputContent);
+        assertEquals(TdApi.SendMessage.CONSTRUCTOR, sendReply.getConstructor());
+        assertNotNull(sendReply.replyTo);
+        assertTrue(sendReply.replyTo instanceof TdApi.InputMessageReplyToMessage);
+        assertEquals(originalMessageId, ((TdApi.InputMessageReplyToMessage) sendReply.replyTo).messageId);
+
+        // 3. Adapter binding with replyTo
+        com.nexgram.messenger.ui.adapter.MessageAdapter adapter = new com.nexgram.messenger.ui.adapter.MessageAdapter(null);
+
+        TdApi.Message originalMsg = new TdApi.Message();
+        originalMsg.id = originalMessageId;
+        originalMsg.date = 1700000000;
+        originalMsg.content = new TdApi.MessageText(new TdApi.FormattedText("Original Question", new TdApi.TextEntity[0]), null, null);
+
+        TdApi.Message replyMsg = new TdApi.Message();
+        replyMsg.id = 987654321L;
+        replyMsg.date = 1700000060;
+        replyMsg.content = new TdApi.MessageText(new TdApi.FormattedText("Reply Answer", new TdApi.TextEntity[0]), null, null);
+        replyMsg.replyTo = new TdApi.MessageReplyToMessage(777000L, originalMessageId, null, 0, null, null, 0, null);
+
+        adapter.setMessages(Arrays.asList(originalMsg, replyMsg));
+        assertEquals(2, adapter.getMessageCount());
+        assertEquals(originalMsg, adapter.getMessageById(originalMessageId));
+        assertEquals(replyMsg, adapter.getMessageById(987654321L));
+        assertEquals(1, adapter.findPositionByMessageId(originalMessageId)); // index 0 is date header, 1 is original
+    }
+
+    @Test
+    public void testMessageForwardRequestConstruction() {
+        long targetChatId = 888888L;
+        long sourceChatId = 999999L;
+        long[] messageIds = new long[]{101L, 102L, 103L};
+
+        TdApi.ForwardMessages forward = new TdApi.ForwardMessages(targetChatId, null, sourceChatId, messageIds, null, false, false);
+        assertEquals(TdApi.ForwardMessages.CONSTRUCTOR, forward.getConstructor());
+        assertEquals(targetChatId, forward.chatId);
+        assertEquals(sourceChatId, forward.fromChatId);
+        org.junit.Assert.assertArrayEquals(messageIds, forward.messageIds);
+        assertFalse(forward.sendCopy);
+    }
+
+    @Test
+    public void testMessageEditRequestConstructionAndReconciliation() {
+        long chatId = 55555L;
+        long messageId = 77777L;
+
+        TdApi.FormattedText newFormattedText = new TdApi.FormattedText("Updated text content", new TdApi.TextEntity[0]);
+        TdApi.InputMessageText inputContent = new TdApi.InputMessageText(newFormattedText, null, true);
+        TdApi.EditMessageText editRequest = new TdApi.EditMessageText(chatId, messageId, null, inputContent);
+
+        assertEquals(TdApi.EditMessageText.CONSTRUCTOR, editRequest.getConstructor());
+        assertEquals(chatId, editRequest.chatId);
+        assertEquals(messageId, editRequest.messageId);
+
+        // Verify adapter edit reconciliation does not duplicate
+        com.nexgram.messenger.ui.adapter.MessageAdapter adapter = new com.nexgram.messenger.ui.adapter.MessageAdapter(null);
+        TdApi.Message m = new TdApi.Message();
+        m.id = messageId;
+        m.date = 1700000000;
+        m.isOutgoing = true;
+        m.content = new TdApi.MessageText(new TdApi.FormattedText("Initial text", new TdApi.TextEntity[0]), null, null);
+
+        adapter.setMessages(Collections.singletonList(m));
+        assertEquals(1, adapter.getMessageCount());
+
+        adapter.onMessageContentUpdated(messageId, new TdApi.MessageText(newFormattedText, null, null));
+        adapter.onMessageEdited(messageId, 1700000100);
+
+        assertEquals(1, adapter.getMessageCount());
+        assertTrue(adapter.containsMessage(messageId));
+        assertEquals(1700000100, adapter.getMessageById(messageId).editDate);
+    }
+
+    @Test
+    public void testMessageDeleteRequestConstructionAndAdapterBatchRemoval() {
+        long chatId = 33333L;
+        long[] toDelete = new long[]{401L, 402L};
+
+        TdApi.DeleteMessages delRequest = new TdApi.DeleteMessages(chatId, toDelete, true);
+        assertEquals(TdApi.DeleteMessages.CONSTRUCTOR, delRequest.getConstructor());
+        assertEquals(chatId, delRequest.chatId);
+        assertTrue(delRequest.revoke);
+
+        com.nexgram.messenger.ui.adapter.MessageAdapter adapter = new com.nexgram.messenger.ui.adapter.MessageAdapter(null);
+        List<TdApi.Message> list = new ArrayList<>();
+        for (long id : new long[]{401L, 402L, 403L}) {
+            TdApi.Message m = new TdApi.Message();
+            m.id = id;
+            m.date = 1700000000;
+            m.content = new TdApi.MessageText(new TdApi.FormattedText("Msg " + id, new TdApi.TextEntity[0]), null, null);
+            list.add(m);
+        }
+        adapter.setMessages(list);
+        assertEquals(3, adapter.getMessageCount());
+
+        adapter.onMessagesDeleted(toDelete);
+        assertEquals(1, adapter.getMessageCount());
+        assertFalse(adapter.containsMessage(401L));
+        assertFalse(adapter.containsMessage(402L));
+        assertTrue(adapter.containsMessage(403L));
+    }
+
+    @Test
+    public void testPinAndUnpinRequestsAndEvents() {
+        long chatId = 121212L;
+        long messageId = 343434L;
+
+        TdApi.PinChatMessage pin = new TdApi.PinChatMessage(chatId, messageId, false, false);
+        assertEquals(TdApi.PinChatMessage.CONSTRUCTOR, pin.getConstructor());
+        assertEquals(chatId, pin.chatId);
+        assertEquals(messageId, pin.messageId);
+
+        TdApi.UnpinChatMessage unpin = new TdApi.UnpinChatMessage(chatId, messageId);
+        assertEquals(TdApi.UnpinChatMessage.CONSTRUCTOR, unpin.getConstructor());
+        assertEquals(chatId, unpin.chatId);
+        assertEquals(messageId, unpin.messageId);
+
+        TdApi.UpdateMessageIsPinned updatePinned = new TdApi.UpdateMessageIsPinned(chatId, messageId, true);
+        assertEquals(TdApi.UpdateMessageIsPinned.CONSTRUCTOR, updatePinned.getConstructor());
+        assertEquals(chatId, updatePinned.chatId);
+        assertEquals(messageId, updatePinned.messageId);
+        assertTrue(updatePinned.isPinned);
+    }
+
+    @Test
+    public void testMessageSelectionModeStateManagement() {
+        com.nexgram.messenger.ui.adapter.MessageAdapter adapter = new com.nexgram.messenger.ui.adapter.MessageAdapter(null);
+
+        List<TdApi.Message> msgs = new ArrayList<>();
+        for (long id : new long[]{501L, 502L, 503L}) {
+            TdApi.Message m = new TdApi.Message();
+            m.id = id;
+            m.date = 1700000000;
+            m.content = new TdApi.MessageText(new TdApi.FormattedText("Select " + id, new TdApi.TextEntity[0]), null, null);
+            msgs.add(m);
+        }
+        adapter.setMessages(msgs);
+
+        assertFalse(adapter.isSelectionMode());
+        assertEquals(0, adapter.getSelectedCount());
+
+        // 1. Start selection
+        adapter.startSelection(501L);
+        assertTrue(adapter.isSelectionMode());
+        assertEquals(1, adapter.getSelectedCount());
+        assertTrue(adapter.getSelectedMessageIds().contains(501L));
+
+        // 2. Toggle additional items
+        adapter.toggleSelection(502L);
+        assertEquals(2, adapter.getSelectedCount());
+        assertTrue(adapter.getSelectedMessageIds().contains(502L));
+
+        List<TdApi.Message> selectedMsgs = adapter.getSelectedMessages();
+        assertEquals(2, selectedMsgs.size());
+
+        // 3. Deselect item
+        adapter.toggleSelection(501L);
+        assertEquals(1, adapter.getSelectedCount());
+        assertFalse(adapter.getSelectedMessageIds().contains(501L));
+        assertTrue(adapter.isSelectionMode());
+
+        // 4. Deselect last item automatically exits selection mode
+        adapter.toggleSelection(502L);
+        assertEquals(0, adapter.getSelectedCount());
+        assertFalse(adapter.isSelectionMode());
+
+        // 5. Clear selection
+        adapter.startSelection(503L);
+        assertTrue(adapter.isSelectionMode());
+        adapter.clearSelection();
+        assertEquals(0, adapter.getSelectedCount());
+        assertFalse(adapter.isSelectionMode());
     }
 }

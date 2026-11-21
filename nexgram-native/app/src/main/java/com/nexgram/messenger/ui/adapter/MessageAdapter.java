@@ -67,13 +67,111 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
     }
 
+    public interface OnMessageInteractionListener {
+        void onMessageClicked(TdApi.Message message, int position);
+        void onMessageLongClicked(TdApi.Message message, int position);
+        void onReplyClicked(long repliedMessageId);
+        void onSelectionChanged(int selectedCount);
+    }
+
     private final Context context;
     private final List<Item> items = new ArrayList<>();
+    private final Set<Long> selectedMessageIds = new HashSet<>();
+    private boolean isSelectionMode = false;
+    private OnMessageInteractionListener interactionListener;
     private long lastReadOutboxMessageId = 0;
     private boolean isGroupChat = false;
 
     public MessageAdapter(Context context) {
         this.context = context;
+    }
+
+    public void setInteractionListener(OnMessageInteractionListener listener) {
+        this.interactionListener = listener;
+    }
+
+    public synchronized boolean isSelectionMode() {
+        return isSelectionMode;
+    }
+
+    public synchronized void startSelection(long messageId) {
+        isSelectionMode = true;
+        selectedMessageIds.clear();
+        selectedMessageIds.add(messageId);
+        safeNotifyDataSetChanged();
+        if (interactionListener != null) {
+            interactionListener.onSelectionChanged(selectedMessageIds.size());
+        }
+    }
+
+    public synchronized void toggleSelection(long messageId) {
+        if (selectedMessageIds.contains(messageId)) {
+            selectedMessageIds.remove(messageId);
+            if (selectedMessageIds.isEmpty()) {
+                isSelectionMode = false;
+            }
+        } else {
+            selectedMessageIds.add(messageId);
+            isSelectionMode = true;
+        }
+        safeNotifyDataSetChanged();
+        if (interactionListener != null) {
+            interactionListener.onSelectionChanged(selectedMessageIds.size());
+        }
+    }
+
+    public synchronized void clearSelection() {
+        if (!selectedMessageIds.isEmpty() || isSelectionMode) {
+            selectedMessageIds.clear();
+            isSelectionMode = false;
+            safeNotifyDataSetChanged();
+            if (interactionListener != null) {
+                interactionListener.onSelectionChanged(0);
+            }
+        }
+    }
+
+    public synchronized Set<Long> getSelectedMessageIds() {
+        return new HashSet<>(selectedMessageIds);
+    }
+
+    public synchronized List<TdApi.Message> getSelectedMessages() {
+        List<TdApi.Message> selected = new ArrayList<>();
+        for (Item it : items) {
+            if (it instanceof MessageItem) {
+                TdApi.Message m = ((MessageItem) it).message;
+                if (selectedMessageIds.contains(m.id)) {
+                    selected.add(m);
+                }
+            }
+        }
+        return selected;
+    }
+
+    public synchronized int getSelectedCount() {
+        return selectedMessageIds.size();
+    }
+
+    public synchronized TdApi.Message getMessageById(long messageId) {
+        for (Item it : items) {
+            if (it instanceof MessageItem) {
+                MessageItem mi = (MessageItem) it;
+                if (mi.message.id == messageId) {
+                    return mi.message;
+                }
+            }
+        }
+        return null;
+    }
+
+    public synchronized int findPositionByMessageId(long messageId) {
+        for (int i = 0; i < items.size(); i++) {
+            Item it = items.get(i);
+            if (it instanceof MessageItem && ((MessageItem) it).message.id == messageId) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public void setGroupChat(boolean isGroupChat) {
@@ -441,6 +539,33 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     private void bindOutgoing(OutgoingViewHolder holder, TdApi.Message message) {
         holder.tvMessageText.setText(getMessageContentText(message));
         holder.tvMessageTime.setText(formatTime(message.date));
+        holder.tvEditedLabel.setVisibility(message.editDate > 0 ? View.VISIBLE : View.GONE);
+
+        // Selection highlight
+        if (selectedMessageIds.contains(message.id)) {
+            holder.messageRoot.setBackgroundResource(R.drawable.bg_message_selected);
+        } else {
+            holder.messageRoot.setBackground(null);
+        }
+
+        // Click and long-click listeners
+        holder.messageRoot.setOnClickListener(v -> {
+            if (isSelectionMode) {
+                toggleSelection(message.id);
+            } else if (interactionListener != null) {
+                interactionListener.onMessageClicked(message, holder.getAdapterPosition());
+            }
+        });
+
+        holder.messageRoot.setOnLongClickListener(v -> {
+            if (interactionListener != null) {
+                interactionListener.onMessageLongClicked(message, holder.getAdapterPosition());
+            }
+            return true;
+        });
+
+        // Reply preview box
+        bindReplyBox(holder.layoutReplyBox, holder.tvReplyAuthor, holder.tvReplyText, message.replyTo);
 
         // Delivery status tick
         if (message.sendingState != null) {
@@ -461,12 +586,64 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     private void bindIncoming(IncomingViewHolder holder, TdApi.Message message) {
         holder.tvMessageText.setText(getMessageContentText(message));
         holder.tvMessageTime.setText(formatTime(message.date));
+        holder.tvEditedLabel.setVisibility(message.editDate > 0 ? View.VISIBLE : View.GONE);
+
+        // Selection highlight
+        if (selectedMessageIds.contains(message.id)) {
+            holder.messageRoot.setBackgroundResource(R.drawable.bg_message_selected);
+        } else {
+            holder.messageRoot.setBackground(null);
+        }
+
+        // Click and long-click listeners
+        holder.messageRoot.setOnClickListener(v -> {
+            if (isSelectionMode) {
+                toggleSelection(message.id);
+            } else if (interactionListener != null) {
+                interactionListener.onMessageClicked(message, holder.getAdapterPosition());
+            }
+        });
+
+        holder.messageRoot.setOnLongClickListener(v -> {
+            if (interactionListener != null) {
+                interactionListener.onMessageLongClicked(message, holder.getAdapterPosition());
+            }
+            return true;
+        });
+
+        // Reply preview box
+        bindReplyBox(holder.layoutReplyBox, holder.tvReplyAuthor, holder.tvReplyText, message.replyTo);
 
         if (isGroupChat && message.senderId != null) {
             holder.tvSenderName.setVisibility(View.VISIBLE);
             holder.tvSenderName.setText(getSenderDisplayName(message.senderId));
         } else {
             holder.tvSenderName.setVisibility(View.GONE);
+        }
+    }
+
+    private void bindReplyBox(View layoutReplyBox, TextView tvReplyAuthor, TextView tvReplyText, TdApi.MessageReplyTo replyTo) {
+        if (replyTo instanceof TdApi.MessageReplyToMessage) {
+            TdApi.MessageReplyToMessage rep = (TdApi.MessageReplyToMessage) replyTo;
+            layoutReplyBox.setVisibility(View.VISIBLE);
+            TdApi.Message orig = getMessageById(rep.messageId);
+            if (orig != null) {
+                tvReplyAuthor.setText(getSenderDisplayName(orig.senderId));
+                tvReplyText.setText(getMessageContentText(orig));
+            } else if (rep.content != null) {
+                tvReplyAuthor.setText("Reply");
+                tvReplyText.setText(TelegramMessageFormatter.formatContentPreview(rep.content));
+            } else {
+                tvReplyAuthor.setText("Reply");
+                tvReplyText.setText("Original message");
+            }
+            layoutReplyBox.setOnClickListener(v -> {
+                if (interactionListener != null) {
+                    interactionListener.onReplyClicked(rep.messageId);
+                }
+            });
+        } else {
+            layoutReplyBox.setVisibility(View.GONE);
         }
     }
 
@@ -531,26 +708,48 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
     static class OutgoingViewHolder extends RecyclerView.ViewHolder {
+        final View messageRoot;
         final TextView tvMessageText;
         final TextView tvMessageTime;
+        final TextView tvEditedLabel;
         final ImageView ivDeliveryStatus;
+        final View layoutReplyBox;
+        final TextView tvReplyAuthor;
+        final TextView tvReplyText;
+
         OutgoingViewHolder(@NonNull View itemView) {
             super(itemView);
+            messageRoot = itemView.findViewById(R.id.messageRoot);
             tvMessageText = itemView.findViewById(R.id.tvMessageText);
             tvMessageTime = itemView.findViewById(R.id.tvMessageTime);
+            tvEditedLabel = itemView.findViewById(R.id.tvEditedLabel);
             ivDeliveryStatus = itemView.findViewById(R.id.ivDeliveryStatus);
+            layoutReplyBox = itemView.findViewById(R.id.layoutReplyBox);
+            tvReplyAuthor = itemView.findViewById(R.id.tvReplyAuthor);
+            tvReplyText = itemView.findViewById(R.id.tvReplyText);
         }
     }
 
     static class IncomingViewHolder extends RecyclerView.ViewHolder {
+        final View messageRoot;
         final TextView tvSenderName;
         final TextView tvMessageText;
         final TextView tvMessageTime;
+        final TextView tvEditedLabel;
+        final View layoutReplyBox;
+        final TextView tvReplyAuthor;
+        final TextView tvReplyText;
+
         IncomingViewHolder(@NonNull View itemView) {
             super(itemView);
+            messageRoot = itemView.findViewById(R.id.messageRoot);
             tvSenderName = itemView.findViewById(R.id.tvSenderName);
             tvMessageText = itemView.findViewById(R.id.tvMessageText);
             tvMessageTime = itemView.findViewById(R.id.tvMessageTime);
+            tvEditedLabel = itemView.findViewById(R.id.tvEditedLabel);
+            layoutReplyBox = itemView.findViewById(R.id.layoutReplyBox);
+            tvReplyAuthor = itemView.findViewById(R.id.tvReplyAuthor);
+            tvReplyText = itemView.findViewById(R.id.tvReplyText);
         }
     }
 }

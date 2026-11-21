@@ -7,7 +7,7 @@
     android:orientation="vertical"
     android:background="@color/bg_dark">
 
-    <!-- Official Telegram Top Header Bar -->
+    <!-- Regular Telegram Top Header Bar -->
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/chatToolbar"
         android:layout_width="match_parent"
@@ -97,6 +97,133 @@
         </LinearLayout>
     </androidx.appcompat.widget.Toolbar>
 
+    <!-- Multi-Message Selection Header Bar (Telegram Style) -->
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/selectionToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/bg_dark_secondary"
+        android:contentInsetStart="0dp"
+        android:contentInsetLeft="0dp"
+        app:contentInsetStart="0dp"
+        app:contentInsetLeft="0dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="8dp">
+
+            <ImageView
+                android:id="@+id/btnCancelSelection"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_close"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                app:tint="#FFFFFF"
+                android:contentDescription="Cancel selection" />
+
+            <TextView
+                android:id="@+id/tvSelectionCount"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:paddingStart="12dp"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:text="1 selected" />
+
+            <ImageView
+                android:id="@+id/btnSelectionCopy"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_copy"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                app:tint="#FFFFFF"
+                android:contentDescription="Copy selected" />
+
+            <ImageView
+                android:id="@+id/btnSelectionForward"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_forward"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                app:tint="#FFFFFF"
+                android:contentDescription="Forward selected" />
+
+            <ImageView
+                android:id="@+id/btnSelectionDelete"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_delete"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                app:tint="#E53935"
+                android:contentDescription="Delete selected" />
+        </LinearLayout>
+    </androidx.appcompat.widget.Toolbar>
+
+    <!-- Pinned Message Bar (Telegram Style) -->
+    <LinearLayout
+        android:id="@+id/layoutPinnedBar"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:orientation="horizontal"
+        android:background="#1B2836"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="2dp"
+            android:layout_height="32dp"
+            android:background="@color/primary"
+            android:layout_marginEnd="10dp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvPinnedTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Pinned Message"
+                android:textColor="@color/primary"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvPinnedSnippet"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/btnPinnedUnpin"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="6dp"
+            android:src="@drawable/ic_close"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            app:tint="@color/text_muted"
+            android:contentDescription="Unpin message" />
+    </LinearLayout>
+
     <!-- Message List Container -->
     <FrameLayout
         android:layout_width="match_parent"
@@ -140,6 +267,68 @@
             android:textSize="14sp"
             android:visibility="gone" />
     </FrameLayout>
+
+    <!-- Composer Header Bar (Reply or Edit mode) -->
+    <LinearLayout
+        android:id="@+id/layoutComposerHeader"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:orientation="horizontal"
+        android:background="@color/bg_dark_secondary"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/ivComposerHeaderIcon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_reply"
+            app:tint="@color/primary"
+            android:layout_marginEnd="10dp" />
+
+        <View
+            android:layout_width="2dp"
+            android:layout_height="30dp"
+            android:background="@color/primary"
+            android:layout_marginEnd="10dp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvComposerHeaderTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Reply to Message"
+                android:textColor="@color/primary"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvComposerHeaderSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/btnCancelComposerAction"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="6dp"
+            android:src="@drawable/ic_close"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            app:tint="@color/text_muted"
+            android:contentDescription="Cancel" />
+    </LinearLayout>
 
     <!-- Modern Telegram Bottom Message Input Bar -->
     <LinearLayout

@@ -77,6 +77,8 @@ public class TdLibAccountClient {
         initializeClient();
     }
 
+    private final java.util.concurrent.ConcurrentHashMap<Long, TdApi.Chat> knownChats = new java.util.concurrent.ConcurrentHashMap<>();
+
     private void initializeClient() {
         Log.i(TAG, "Initializing TDLib client for account: " + accountId);
 
@@ -86,6 +88,24 @@ public class TdLibAccountClient {
             } else if (object instanceof TdApi.UpdateConnectionState) {
                 TdApi.ConnectionState state = ((TdApi.UpdateConnectionState) object).state;
                 Log.i(TAG, "Account " + accountId + " ConnectionState: " + state.getClass().getSimpleName());
+            } else if (object instanceof TdApi.UpdateNewChat) {
+                TdApi.Chat chat = ((TdApi.UpdateNewChat) object).chat;
+                if (chat != null) knownChats.put(chat.id, chat);
+            } else if (object instanceof TdApi.UpdateChatTitle) {
+                TdApi.UpdateChatTitle uct = (TdApi.UpdateChatTitle) object;
+                TdApi.Chat chat = knownChats.get(uct.chatId);
+                if (chat != null) chat.title = uct.title;
+            } else if (object instanceof TdApi.UpdateChatPosition) {
+                TdApi.UpdateChatPosition ucp = (TdApi.UpdateChatPosition) object;
+                TdApi.Chat chat = knownChats.get(ucp.chatId);
+                if (chat != null && chat.positions != null) {
+                    for (int i = 0; i < chat.positions.length; i++) {
+                        if (chat.positions[i].list.getConstructor() == ucp.position.list.getConstructor()) {
+                            chat.positions[i] = ucp.position;
+                            break;
+                        }
+                    }
+                }
             }
             for (RawUpdateListener listener : rawUpdateListeners) {
                 try {
@@ -361,7 +381,14 @@ public class TdLibAccountClient {
      * Retrieves a Chat object by its unique 64-bit ID.
      */
     public void getChat(long chatId, Client.ResultHandler handler) {
-        send(new TdApi.GetChat(chatId), handler);
+        send(new TdApi.GetChat(chatId), result -> {
+            if (result instanceof TdApi.Chat) {
+                cacheChat((TdApi.Chat) result);
+            }
+            if (handler != null) {
+                handler.onResult(result);
+            }
+        });
     }
 
     /**
@@ -462,5 +489,65 @@ public class TdLibAccountClient {
      */
     public void getProxies(Client.ResultHandler handler) {
         send(new TdApi.GetProxies(), handler);
+    }
+
+    /**
+     * Returns snapshot of all currently known / cached chats.
+     */
+    public java.util.List<TdApi.Chat> getKnownChats() {
+        return new java.util.ArrayList<>(knownChats.values());
+    }
+
+    /**
+     * Caches a chat in the known chats map.
+     */
+    public void cacheChat(TdApi.Chat chat) {
+        if (chat != null) {
+            knownChats.put(chat.id, chat);
+        }
+    }
+
+    /**
+     * Edits message text via TDLib.
+     */
+    public void editMessageText(long chatId, long messageId, String newText, Client.ResultHandler handler) {
+        TdApi.FormattedText formattedText = new TdApi.FormattedText(newText, new TdApi.TextEntity[0]);
+        TdApi.InputMessageText inputContent = new TdApi.InputMessageText(formattedText, null, true);
+        send(new TdApi.EditMessageText(chatId, messageId, null, inputContent), handler);
+    }
+
+    /**
+     * Forwards one or more messages to another chat via TDLib.
+     */
+    public void forwardMessages(long targetChatId, long fromChatId, long[] messageIds, boolean sendCopy, Client.ResultHandler handler) {
+        send(new TdApi.ForwardMessages(targetChatId, null, fromChatId, messageIds, null, sendCopy, false), handler);
+    }
+
+    /**
+     * Pins a message in a chat.
+     */
+    public void pinChatMessage(long chatId, long messageId, boolean disableNotification, boolean onlyForSelf, Client.ResultHandler handler) {
+        send(new TdApi.PinChatMessage(chatId, messageId, disableNotification, onlyForSelf), handler);
+    }
+
+    /**
+     * Unpins a message in a chat.
+     */
+    public void unpinChatMessage(long chatId, long messageId, Client.ResultHandler handler) {
+        send(new TdApi.UnpinChatMessage(chatId, messageId), handler);
+    }
+
+    /**
+     * Queries authoritative TDLib message properties (permissions, editable, deletable, forwardable).
+     */
+    public void getMessageProperties(long chatId, long messageId, Client.ResultHandler handler) {
+        send(new TdApi.GetMessageProperties(chatId, messageId), handler);
+    }
+
+    /**
+     * Gets the latest pinned message in a chat.
+     */
+    public void getChatPinnedMessage(long chatId, Client.ResultHandler handler) {
+        send(new TdApi.GetChatPinnedMessage(chatId), handler);
     }
 }

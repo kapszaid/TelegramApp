@@ -63,4 +63,11 @@ public class TelegramMessageFormatter {
 
         return "Message";
     }
+
+    public static String formatContentPreview(TdApi.MessageContent content) {
+        if (content == null) return "Message";
+        TdApi.Message dummy = new TdApi.Message();
+        dummy.content = content;
+        return formatMessagePreview(dummy);
+    }
 }

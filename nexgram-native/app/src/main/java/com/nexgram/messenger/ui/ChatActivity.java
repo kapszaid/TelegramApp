@@ -1,11 +1,20 @@
 package com.nexgram.messenger.ui;
 
+import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.graphics.PorterDuff;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -23,6 +32,7 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.nexgram.messenger.NexGramApplication;
 import com.nexgram.messenger.R;
 import com.nexgram.messenger.auth.AccountManager;
@@ -30,26 +40,31 @@ import com.nexgram.messenger.tdlib.TdLibAccountClient;
 import com.nexgram.messenger.tdlib.TdLibManager;
 import com.nexgram.messenger.ui.adapter.MessageAdapter;
 import com.nexgram.messenger.ui.helpers.TelegramAvatarHelper;
+import com.nexgram.messenger.ui.helpers.TelegramMessageFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import org.drinkless.tdlib.TdApi;
 
 /**
  * Modern Telegram Conversation Screen
  *
- * Implements Milestone 2.6 — Real Message History & Infinite Scroll Pagination:
+ * Implements Milestone 2.6 & Milestone 2.7 — Complete Telegram Message Actions:
  * - Real Telegram message history loading via TDLib GetChatHistory
  * - Infinite upward scroll pagination with seamless scroll-offset preservation
  * - Real-time updates: UpdateNewMessage, SendSucceeded, SendFailed, ContentEdited, MessageDeleted, ReadStatus
+ * - Reply to message with preview header and in-bubble navigation
+ * - Edit own message with in-composer editing and real-time update
+ * - Forward message(s) with Telegram chat selection interface
+ * - Delete message(s) with "delete for me" and "delete for everyone" scope
+ * - Android ClipboardManager text copying
+ * - Pin and unpin message functionality with top pinned message banner
+ * - Multi-message selection mode with dedicated action toolbar
  * - Edge-to-edge window insets handling for system bars and soft keyboard (adjustResize)
- * - 40dp circular avatar with official 7-color palette and monogram initials / photo caching
- * - Dynamic chat title and subtitle (service notifications, online status, group member count)
- * - Message bubbles matching official Telegram colors (#182533 incoming, #2B5278 outgoing)
- * - Bottom input bar with emoji, paperclip attach, and dynamic voice-mic / blue send airplane button
  * - Zero fake mock data: 100% genuine TDLib MTProto engine
  */
-public class ChatActivity extends AppCompatActivity {
+public class ChatActivity extends AppCompatActivity implements MessageAdapter.OnMessageInteractionListener {
     private static final String TAG = "ChatActivity";
     private static final int PAGE_LIMIT = 50;
 
@@ -57,6 +72,7 @@ public class ChatActivity extends AppCompatActivity {
     private String chatTitle;
     private int avatarFileId = -1;
 
+    // Normal Toolbar
     private Toolbar chatToolbar;
     private ImageView btnBack;
     private ImageView ivChatAvatarCircle;
@@ -65,11 +81,34 @@ public class ChatActivity extends AppCompatActivity {
     private TextView tvChatTitle;
     private TextView tvChatSubtitle;
 
+    // Selection Toolbar
+    private Toolbar selectionToolbar;
+    private ImageView btnCancelSelection;
+    private TextView tvSelectionCount;
+    private ImageView btnSelectionCopy;
+    private ImageView btnSelectionForward;
+    private ImageView btnSelectionDelete;
+
+    // Pinned Message Bar
+    private LinearLayout layoutPinnedBar;
+    private TextView tvPinnedTitle;
+    private TextView tvPinnedSnippet;
+    private ImageView btnPinnedUnpin;
+
+    // Message List
     private RecyclerView recyclerViewMessages;
     private ProgressBar pbLoadingMessages;
     private ProgressBar pbLoadingOlderMessages;
     private TextView tvEmptyMessages;
 
+    // Composer Header (Reply or Edit mode)
+    private LinearLayout layoutComposerHeader;
+    private ImageView ivComposerHeaderIcon;
+    private TextView tvComposerHeaderTitle;
+    private TextView tvComposerHeaderSubtitle;
+    private ImageView btnCancelComposerAction;
+
+    // Bottom Input Bar
     private LinearLayout layoutBottomInput;
     private ImageView btnEmoji;
     private EditText etMessageInput;
@@ -85,6 +124,11 @@ public class ChatActivity extends AppCompatActivity {
     // Pagination state
     private boolean isLoadingOlderHistory = false;
     private boolean hasReachedBeginningOfHistory = false;
+
+    // Action state
+    private TdApi.Message replyingToMessage = null;
+    private TdApi.Message editingMessage = null;
+    private TdApi.Message currentPinnedMessage = null;
 
     private final TdLibAccountClient.RawUpdateListener rawUpdateListener = this::handleIncomingTdlibUpdate;
 
@@ -106,6 +150,9 @@ public class ChatActivity extends AppCompatActivity {
         initViews();
         setupWindowInsets();
         setupChatHeader();
+        setupSelectionToolbar();
+        setupPinnedBar();
+        setupComposerHeader();
         setupRecyclerView();
         setupInputBar();
         connectTdLibAndLoadMessages();
@@ -120,10 +167,28 @@ public class ChatActivity extends AppCompatActivity {
         tvChatTitle = findViewById(R.id.tvChatTitle);
         tvChatSubtitle = findViewById(R.id.tvChatSubtitle);
 
+        selectionToolbar = findViewById(R.id.selectionToolbar);
+        btnCancelSelection = findViewById(R.id.btnCancelSelection);
+        tvSelectionCount = findViewById(R.id.tvSelectionCount);
+        btnSelectionCopy = findViewById(R.id.btnSelectionCopy);
+        btnSelectionForward = findViewById(R.id.btnSelectionForward);
+        btnSelectionDelete = findViewById(R.id.btnSelectionDelete);
+
+        layoutPinnedBar = findViewById(R.id.layoutPinnedBar);
+        tvPinnedTitle = findViewById(R.id.tvPinnedTitle);
+        tvPinnedSnippet = findViewById(R.id.tvPinnedSnippet);
+        btnPinnedUnpin = findViewById(R.id.btnPinnedUnpin);
+
         recyclerViewMessages = findViewById(R.id.recyclerViewMessages);
         pbLoadingMessages = findViewById(R.id.pbLoadingMessages);
         pbLoadingOlderMessages = findViewById(R.id.pbLoadingOlderMessages);
         tvEmptyMessages = findViewById(R.id.tvEmptyMessages);
+
+        layoutComposerHeader = findViewById(R.id.layoutComposerHeader);
+        ivComposerHeaderIcon = findViewById(R.id.ivComposerHeaderIcon);
+        tvComposerHeaderTitle = findViewById(R.id.tvComposerHeaderTitle);
+        tvComposerHeaderSubtitle = findViewById(R.id.tvComposerHeaderSubtitle);
+        btnCancelComposerAction = findViewById(R.id.btnCancelComposerAction);
 
         layoutBottomInput = findViewById(R.id.layoutBottomInput);
         btnEmoji = findViewById(R.id.btnEmoji);
@@ -133,14 +198,9 @@ public class ChatActivity extends AppCompatActivity {
         ivSendBgCircle = findViewById(R.id.ivSendBgCircle);
         ivSendOrMicIcon = findViewById(R.id.ivSendOrMicIcon);
 
-        btnBack.setOnClickListener(v -> finish());
+        btnBack.setOnClickListener(v -> onBackPressed());
     }
 
-    /**
-     * Resolves window insets dynamically.
-     * Prevents system 3-button or gesture navigation bar from overlapping the message input box,
-     * and automatically pushes input box up smoothly above the soft keyboard when opened.
-     */
     private void setupWindowInsets() {
         View root = findViewById(R.id.chatRootLayout);
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, windowInsets) -> {
@@ -148,10 +208,11 @@ public class ChatActivity extends AppCompatActivity {
                 WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.ime()
             );
 
-            // Pad top toolbar to sit cleanly below status bar
+            // Pad toolbars to sit cleanly below status bar
             chatToolbar.setPadding(0, insets.top, 0, 0);
+            selectionToolbar.setPadding(0, insets.top, 0, 0);
 
-            // Pad bottom input bar above system navigation bar and above keyboard
+            // Pad bottom input bar above system navigation bar and soft keyboard
             int padLeft = layoutBottomInput.getPaddingLeft();
             int padRight = layoutBottomInput.getPaddingRight();
             int padTop = (int) (6 * getResources().getDisplayMetrics().density);
@@ -179,12 +240,56 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    private void setupSelectionToolbar() {
+        btnCancelSelection.setOnClickListener(v -> messageAdapter.clearSelection());
+
+        btnSelectionCopy.setOnClickListener(v -> {
+            List<TdApi.Message> selected = messageAdapter.getSelectedMessages();
+            if (!selected.isEmpty()) {
+                copyMessageText(selected);
+            }
+        });
+
+        btnSelectionForward.setOnClickListener(v -> {
+            List<Long> ids = new ArrayList<>(messageAdapter.getSelectedMessageIds());
+            if (!ids.isEmpty()) {
+                showForwardDialog(ids);
+            }
+        });
+
+        btnSelectionDelete.setOnClickListener(v -> {
+            List<Long> ids = new ArrayList<>(messageAdapter.getSelectedMessageIds());
+            if (!ids.isEmpty()) {
+                showDeleteConfirmationDialog(ids, true);
+            }
+        });
+    }
+
+    private void setupPinnedBar() {
+        layoutPinnedBar.setOnClickListener(v -> {
+            if (currentPinnedMessage != null) {
+                scrollToMessage(currentPinnedMessage.id);
+            }
+        });
+
+        btnPinnedUnpin.setOnClickListener(v -> {
+            if (currentPinnedMessage != null) {
+                togglePinMessage(currentPinnedMessage);
+            }
+        });
+    }
+
+    private void setupComposerHeader() {
+        btnCancelComposerAction.setOnClickListener(v -> cancelActiveComposerAction());
+    }
+
     private void setupRecyclerView() {
         layoutManager = new LinearLayoutManager(this);
         layoutManager.setStackFromEnd(true);
         recyclerViewMessages.setLayoutManager(layoutManager);
 
         messageAdapter = new MessageAdapter(this);
+        messageAdapter.setInteractionListener(this);
         recyclerViewMessages.setAdapter(messageAdapter);
 
         // Infinite upward scroll pagination listener
@@ -192,7 +297,6 @@ public class ChatActivity extends AppCompatActivity {
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
                 super.onScrolled(recyclerView, dx, dy);
-                // When scrolling upward towards top and near the first items, trigger pagination
                 if (!isLoadingOlderHistory && !hasReachedBeginningOfHistory) {
                     int firstVisible = layoutManager.findFirstVisibleItemPosition();
                     if (firstVisible <= 5 && firstVisible != RecyclerView.NO_POSITION) {
@@ -219,9 +323,13 @@ public class ChatActivity extends AppCompatActivity {
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 boolean hasText = s != null && s.toString().trim().length() > 0;
-                if (hasText) {
+                if (hasText || editingMessage != null) {
                     ivSendBgCircle.setVisibility(View.VISIBLE);
-                    ivSendOrMicIcon.setImageResource(R.drawable.ic_send);
+                    if (editingMessage != null) {
+                        ivSendOrMicIcon.setImageResource(R.drawable.ic_check);
+                    } else {
+                        ivSendOrMicIcon.setImageResource(R.drawable.ic_send);
+                    }
                     ivSendOrMicIcon.setColorFilter(0xFFFFFFFF, PorterDuff.Mode.SRC_IN);
                 } else {
                     ivSendBgCircle.setVisibility(View.GONE);
@@ -236,6 +344,11 @@ public class ChatActivity extends AppCompatActivity {
 
         btnSendOrMic.setOnClickListener(v -> {
             String text = etMessageInput.getText().toString().trim();
+            if (editingMessage != null) {
+                submitEditMessage(text);
+                return;
+            }
+
             if (text.isEmpty()) {
                 Toast.makeText(this, "Hold to record voice message", Toast.LENGTH_SHORT).show();
                 return;
@@ -290,7 +403,6 @@ public class ChatActivity extends AppCompatActivity {
                         recyclerViewMessages.scrollToPosition(messageAdapter.getItemCount() - 1);
                         tvEmptyMessages.setVisibility(View.GONE);
 
-                        // If returned count is less than requested limit, beginning of history reached
                         if (msgs.messages.length < PAGE_LIMIT) {
                             hasReachedBeginningOfHistory = true;
                         }
@@ -308,14 +420,13 @@ public class ChatActivity extends AppCompatActivity {
                 } else {
                     tvEmptyMessages.setVisibility(View.VISIBLE);
                 }
+
+                // Check for pinned message
+                loadPinnedMessage();
             });
         });
     }
 
-    /**
-     * Loads older messages via TDLib GetChatHistory pagination.
-     * Preserves the user's visible scroll position without jumping.
-     */
     private synchronized void loadOlderChatHistory() {
         if (isLoadingOlderHistory || hasReachedBeginningOfHistory || activeClient == null) {
             return;
@@ -352,7 +463,6 @@ public class ChatActivity extends AppCompatActivity {
                         if (genuinelyOlder.isEmpty()) {
                             hasReachedBeginningOfHistory = true;
                         } else {
-                            // Record current top visible position & pixel offset to maintain exact scroll position
                             int firstVisible = layoutManager.findFirstVisibleItemPosition();
                             View topView = layoutManager.findViewByPosition(firstVisible);
                             int topOffset = (topView != null) ? (topView.getTop() - recyclerViewMessages.getPaddingTop()) : 0;
@@ -384,7 +494,6 @@ public class ChatActivity extends AppCompatActivity {
             tvChatAvatarInitials.setText(TelegramAvatarHelper.getInitials(chat.title));
         }
 
-        // Subtitle handling based on chat type
         if (chatId == 777000L || (chat.title != null && chat.title.toLowerCase().contains("telegram"))) {
             tvChatSubtitle.setText("service notifications");
         } else if (chat.type instanceof TdApi.ChatTypeSupergroup) {
@@ -399,7 +508,6 @@ public class ChatActivity extends AppCompatActivity {
             messageAdapter.setGroupChat(false);
         }
 
-        // Photo loading
         if (chat.photo != null && chat.photo.small != null) {
             avatarFileId = chat.photo.small.id;
             if (chat.photo.small.local.isDownloadingCompleted &&
@@ -421,6 +529,23 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    private void loadPinnedMessage() {
+        if (activeClient == null) return;
+        activeClient.getChatPinnedMessage(chatId, result -> {
+            runOnUiThread(() -> {
+                if (result instanceof TdApi.Message) {
+                    currentPinnedMessage = (TdApi.Message) result;
+                    layoutPinnedBar.setVisibility(View.VISIBLE);
+                    String snippet = getMessageText(currentPinnedMessage);
+                    tvPinnedSnippet.setText(snippet.isEmpty() ? "Pinned message" : snippet);
+                } else {
+                    currentPinnedMessage = null;
+                    layoutPinnedBar.setVisibility(View.GONE);
+                }
+            });
+        });
+    }
+
     private void sendMessageToTelegram(String text) {
         if (activeClient == null) return;
 
@@ -428,11 +553,16 @@ public class ChatActivity extends AppCompatActivity {
 
         TdApi.FormattedText formattedText = new TdApi.FormattedText(text, new TdApi.TextEntity[0]);
         TdApi.InputMessageText inputContent = new TdApi.InputMessageText(formattedText, null, true);
-        TdApi.SendMessage sendRequest = new TdApi.SendMessage(chatId, null, null, null, null, inputContent);
+
+        TdApi.InputMessageReplyTo replyTo = (replyingToMessage != null)
+            ? new TdApi.InputMessageReplyToMessage(replyingToMessage.id, null, 0, null)
+            : null;
+
+        TdApi.SendMessage sendRequest = new TdApi.SendMessage(chatId, null, replyTo, null, null, inputContent);
+
+        cancelReplyMode();
 
         activeClient.send(sendRequest, result -> {
-            // Note: TDLib automatically dispatches UpdateNewMessage for this outgoing message!
-            // We do NOT manually append here to avoid duplicate bubbles.
             if (result instanceof TdApi.Error) {
                 TdApi.Error err = (TdApi.Error) result;
                 runOnUiThread(() ->
@@ -440,6 +570,416 @@ public class ChatActivity extends AppCompatActivity {
                 );
             }
         });
+    }
+
+    private void submitEditMessage(String newText) {
+        if (activeClient == null || editingMessage == null) return;
+
+        if (newText.isEmpty()) {
+            Toast.makeText(this, "Message cannot be empty", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final long targetMessageId = editingMessage.id;
+        activeClient.editMessageText(chatId, targetMessageId, newText, result -> {
+            runOnUiThread(() -> {
+                if (result instanceof TdApi.Error) {
+                    Toast.makeText(this, "Edit failed: " + ((TdApi.Error) result).message, Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, "Message edited", Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+
+        cancelEditMode();
+    }
+
+    // ==========================================
+    // MESSAGE ACTIONS (Milestone 2.7)
+    // ==========================================
+
+    @Override
+    public void onMessageClicked(TdApi.Message message, int position) {
+        openMessageActionsMenu(message);
+    }
+
+    @Override
+    public void onMessageLongClicked(TdApi.Message message, int position) {
+        openMessageActionsMenu(message);
+    }
+
+    @Override
+    public void onReplyClicked(long repliedMessageId) {
+        scrollToMessage(repliedMessageId);
+    }
+
+    @Override
+    public void onSelectionChanged(int selectedCount) {
+        updateSelectionToolbar(selectedCount);
+    }
+
+    private void updateSelectionToolbar(int selectedCount) {
+        if (selectedCount > 0) {
+            chatToolbar.setVisibility(View.GONE);
+            selectionToolbar.setVisibility(View.VISIBLE);
+            tvSelectionCount.setText(selectedCount + " selected");
+            layoutBottomInput.setVisibility(View.GONE);
+            layoutComposerHeader.setVisibility(View.GONE);
+        } else {
+            chatToolbar.setVisibility(View.VISIBLE);
+            selectionToolbar.setVisibility(View.GONE);
+            layoutBottomInput.setVisibility(View.VISIBLE);
+            if (replyingToMessage != null || editingMessage != null) {
+                layoutComposerHeader.setVisibility(View.VISIBLE);
+            }
+        }
+    }
+
+    private void scrollToMessage(long targetMessageId) {
+        int pos = messageAdapter.findPositionByMessageId(targetMessageId);
+        if (pos != -1) {
+            recyclerViewMessages.smoothScrollToPosition(pos);
+        } else {
+            Toast.makeText(this, "Original message is older, scroll up to load", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openMessageActionsMenu(TdApi.Message message) {
+        BottomSheetDialog dialog = new BottomSheetDialog(this);
+        View view = LayoutInflater.from(this).inflate(R.layout.dialog_message_actions, null);
+        dialog.setContentView(view);
+
+        View actionReply = view.findViewById(R.id.actionReply);
+        View actionEdit = view.findViewById(R.id.actionEdit);
+        View actionCopy = view.findViewById(R.id.actionCopy);
+        View actionForward = view.findViewById(R.id.actionForward);
+        View actionPin = view.findViewById(R.id.actionPin);
+        ImageView ivActionPinIcon = view.findViewById(R.id.ivActionPinIcon);
+        TextView tvActionPinText = view.findViewById(R.id.tvActionPinText);
+        View actionSelect = view.findViewById(R.id.actionSelect);
+        View actionDelete = view.findViewById(R.id.actionDelete);
+
+        // Edit is permitted only for user's outgoing text messages that are delivered
+        boolean canEdit = message.isOutgoing && (message.content instanceof TdApi.MessageText) && (message.sendingState == null);
+        actionEdit.setVisibility(canEdit ? View.VISIBLE : View.GONE);
+
+        // Pin / Unpin label
+        if (message.isPinned) {
+            tvActionPinText.setText("Unpin");
+        } else {
+            tvActionPinText.setText("Pin");
+        }
+
+        // Copy is visible if text is present
+        String msgText = getMessageText(message);
+        actionCopy.setVisibility(!msgText.isEmpty() ? View.VISIBLE : View.GONE);
+
+        actionReply.setOnClickListener(v -> {
+            dialog.dismiss();
+            startReplyMode(message);
+        });
+
+        actionEdit.setOnClickListener(v -> {
+            dialog.dismiss();
+            startEditMode(message);
+        });
+
+        actionCopy.setOnClickListener(v -> {
+            dialog.dismiss();
+            copyMessageText(Collections.singletonList(message));
+        });
+
+        actionForward.setOnClickListener(v -> {
+            dialog.dismiss();
+            showForwardDialog(Collections.singletonList(message.id));
+        });
+
+        actionPin.setOnClickListener(v -> {
+            dialog.dismiss();
+            togglePinMessage(message);
+        });
+
+        actionSelect.setOnClickListener(v -> {
+            dialog.dismiss();
+            messageAdapter.startSelection(message.id);
+        });
+
+        actionDelete.setOnClickListener(v -> {
+            dialog.dismiss();
+            showDeleteConfirmationDialog(Collections.singletonList(message.id), message.isOutgoing);
+        });
+
+        dialog.show();
+    }
+
+    private void startReplyMode(TdApi.Message message) {
+        cancelEditMode();
+        replyingToMessage = message;
+
+        layoutComposerHeader.setVisibility(View.VISIBLE);
+        ivComposerHeaderIcon.setImageResource(R.drawable.ic_reply);
+        tvComposerHeaderTitle.setText("Reply to Message");
+        String snippet = getMessageText(message);
+        tvComposerHeaderSubtitle.setText(snippet.isEmpty() ? "Message" : snippet);
+
+        etMessageInput.requestFocus();
+        showKeyboard();
+    }
+
+    private void cancelReplyMode() {
+        replyingToMessage = null;
+        if (editingMessage == null) {
+            layoutComposerHeader.setVisibility(View.GONE);
+        }
+    }
+
+    private void startEditMode(TdApi.Message message) {
+        cancelReplyMode();
+        editingMessage = message;
+
+        layoutComposerHeader.setVisibility(View.VISIBLE);
+        ivComposerHeaderIcon.setImageResource(R.drawable.ic_edit);
+        tvComposerHeaderTitle.setText("Edit Message");
+        String originalText = getMessageText(message);
+        tvComposerHeaderSubtitle.setText(originalText);
+
+        etMessageInput.setText(originalText);
+        etMessageInput.setSelection(originalText.length());
+        etMessageInput.requestFocus();
+
+        ivSendBgCircle.setVisibility(View.VISIBLE);
+        ivSendOrMicIcon.setImageResource(R.drawable.ic_check);
+        ivSendOrMicIcon.setColorFilter(0xFFFFFFFF, PorterDuff.Mode.SRC_IN);
+
+        showKeyboard();
+    }
+
+    private void cancelEditMode() {
+        editingMessage = null;
+        etMessageInput.setText("");
+        if (replyingToMessage == null) {
+            layoutComposerHeader.setVisibility(View.GONE);
+        }
+        ivSendBgCircle.setVisibility(View.GONE);
+        ivSendOrMicIcon.setImageResource(R.drawable.ic_mic);
+        ivSendOrMicIcon.setColorFilter(0xFF7F91A4, PorterDuff.Mode.SRC_IN);
+    }
+
+    private void cancelActiveComposerAction() {
+        cancelReplyMode();
+        cancelEditMode();
+    }
+
+    private void copyMessageText(List<TdApi.Message> messages) {
+        if (messages == null || messages.isEmpty()) return;
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < messages.size(); i++) {
+            String text = getMessageText(messages.get(i));
+            if (!text.isEmpty()) {
+                if (sb.length() > 0) sb.append("\n\n");
+                sb.append(text);
+            }
+        }
+
+        if (sb.length() == 0) {
+            Toast.makeText(this, "No text to copy", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipData clip = ClipData.newPlainText("Telegram message", sb.toString());
+        clipboard.setPrimaryClip(clip);
+
+        Toast.makeText(this, "Text copied to clipboard", Toast.LENGTH_SHORT).show();
+
+        if (messageAdapter.isSelectionMode()) {
+            messageAdapter.clearSelection();
+        }
+    }
+
+    private void togglePinMessage(TdApi.Message message) {
+        if (activeClient == null || message == null) return;
+
+        if (message.isPinned) {
+            activeClient.unpinChatMessage(chatId, message.id, result -> {
+                runOnUiThread(() -> {
+                    if (result instanceof TdApi.Error) {
+                        Toast.makeText(this, "Unpin failed: " + ((TdApi.Error) result).message, Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "Message unpinned", Toast.LENGTH_SHORT).show();
+                        loadPinnedMessage();
+                    }
+                });
+            });
+        } else {
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setTitle("Pin Message");
+            builder.setMessage("Do you want to pin this message in " + chatTitle + "?");
+
+            View dialogView = LayoutInflater.from(this).inflate(android.R.layout.select_dialog_item, null);
+            CheckBox cbNotify = new CheckBox(this);
+            cbNotify.setText("Notify all members");
+            cbNotify.setChecked(true);
+            cbNotify.setPadding(32, 16, 32, 16);
+            builder.setView(cbNotify);
+
+            builder.setPositiveButton("Pin", (d, which) -> {
+                boolean notify = cbNotify.isChecked();
+                activeClient.pinChatMessage(chatId, message.id, !notify, false, result -> {
+                    runOnUiThread(() -> {
+                        if (result instanceof TdApi.Error) {
+                            Toast.makeText(this, "Pin failed: " + ((TdApi.Error) result).message, Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(this, "Message pinned", Toast.LENGTH_SHORT).show();
+                            loadPinnedMessage();
+                        }
+                    });
+                });
+            });
+            builder.setNegativeButton("Cancel", null);
+            builder.show();
+        }
+    }
+
+    private void showDeleteConfirmationDialog(List<Long> messageIds, boolean isOutgoing) {
+        if (messageIds == null || messageIds.isEmpty() || activeClient == null) return;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(messageIds.size() == 1 ? "Delete Message" : "Delete " + messageIds.size() + " Messages");
+        builder.setMessage("Are you sure you want to delete the selected message(s)?");
+
+        // Allow "delete for everyone" checkbox if not service notification
+        CheckBox cbRevoke = new CheckBox(this);
+        cbRevoke.setText("Also delete for " + chatTitle);
+        cbRevoke.setChecked(isOutgoing);
+        cbRevoke.setPadding(32, 16, 32, 16);
+        if (chatId != 777000L) {
+            builder.setView(cbRevoke);
+        }
+
+        builder.setPositiveButton("Delete", (d, which) -> {
+            boolean revoke = cbRevoke.isChecked();
+            long[] ids = new long[messageIds.size()];
+            for (int i = 0; i < messageIds.size(); i++) {
+                ids[i] = messageIds.get(i);
+            }
+
+            activeClient.deleteMessages(chatId, ids, revoke, result -> {
+                runOnUiThread(() -> {
+                    if (result instanceof TdApi.Error) {
+                        Toast.makeText(this, "Delete failed: " + ((TdApi.Error) result).message, Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "Message(s) deleted", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            });
+
+            if (messageAdapter.isSelectionMode()) {
+                messageAdapter.clearSelection();
+            }
+        });
+
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+
+    private void showForwardDialog(List<Long> messageIds) {
+        if (activeClient == null || messageIds == null || messageIds.isEmpty()) return;
+
+        BottomSheetDialog forwardDialog = new BottomSheetDialog(this);
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_forward_chat, null);
+        forwardDialog.setContentView(dialogView);
+
+        RecyclerView rvChats = dialogView.findViewById(R.id.rvForwardChats);
+        TextView tvEmpty = dialogView.findViewById(R.id.tvEmptyForwardChats);
+        ImageView btnClose = dialogView.findViewById(R.id.btnForwardClose);
+
+        btnClose.setOnClickListener(v -> forwardDialog.dismiss());
+
+        rvChats.setLayoutManager(new LinearLayoutManager(this));
+
+        List<TdApi.Chat> known = activeClient.getKnownChats();
+        // Exclude current chat from destination list if possible, or allow sending to self
+        List<TdApi.Chat> forwardTargets = new ArrayList<>();
+        for (TdApi.Chat c : known) {
+            if (c != null && c.id != chatId) {
+                forwardTargets.add(c);
+            }
+        }
+
+        if (forwardTargets.isEmpty()) {
+            tvEmpty.setVisibility(View.VISIBLE);
+            rvChats.setVisibility(View.GONE);
+        } else {
+            tvEmpty.setVisibility(View.GONE);
+            rvChats.setVisibility(View.VISIBLE);
+            ForwardChatAdapter adapter = new ForwardChatAdapter(forwardTargets, targetChat -> {
+                confirmAndForward(targetChat, messageIds);
+                forwardDialog.dismiss();
+            });
+            rvChats.setAdapter(adapter);
+        }
+
+        forwardDialog.show();
+    }
+
+    private void confirmAndForward(TdApi.Chat targetChat, List<Long> messageIds) {
+        if (activeClient == null || targetChat == null || messageIds.isEmpty()) return;
+
+        long[] ids = new long[messageIds.size()];
+        for (int i = 0; i < messageIds.size(); i++) {
+            ids[i] = messageIds.get(i);
+        }
+
+        activeClient.forwardMessages(targetChat.id, chatId, ids, false, result -> {
+            runOnUiThread(() -> {
+                if (result instanceof TdApi.Error) {
+                    Toast.makeText(this, "Forward failed: " + ((TdApi.Error) result).message, Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, "Forwarded to " + targetChat.title, Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+
+        if (messageAdapter.isSelectionMode()) {
+            messageAdapter.clearSelection();
+        }
+    }
+
+    private String getMessageText(TdApi.Message msg) {
+        if (msg == null || msg.content == null) return "";
+        if (msg.content instanceof TdApi.MessageText) {
+            TdApi.MessageText textMsg = (TdApi.MessageText) msg.content;
+            if (textMsg.text != null && textMsg.text.text != null) {
+                return textMsg.text.text;
+            }
+        }
+        return TelegramMessageFormatter.formatMessagePreview(msg);
+    }
+
+    private void showKeyboard() {
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.showSoftInput(etMessageInput, InputMethodManager.SHOW_IMPLICIT);
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (messageAdapter != null && messageAdapter.isSelectionMode()) {
+            messageAdapter.clearSelection();
+            return;
+        }
+        if (editingMessage != null) {
+            cancelEditMode();
+            return;
+        }
+        if (replyingToMessage != null) {
+            cancelReplyMode();
+            return;
+        }
+        super.onBackPressed();
     }
 
     private void handleIncomingTdlibUpdate(TdApi.Object update) {
@@ -450,7 +990,6 @@ public class ChatActivity extends AppCompatActivity {
                     boolean isNearBottom = layoutManager.findLastVisibleItemPosition() >= messageAdapter.getItemCount() - 3;
                     messageAdapter.appendOrUpdateMessage(updateMsg.message);
 
-                    // Auto-scroll only if user is already near bottom or sending outgoing
                     if (isNearBottom || updateMsg.message.isOutgoing) {
                         recyclerViewMessages.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
                     }
@@ -493,17 +1032,25 @@ public class ChatActivity extends AppCompatActivity {
                     if (messageAdapter.getMessageCount() == 0) {
                         tvEmptyMessages.setVisibility(View.VISIBLE);
                     }
+                    if (currentPinnedMessage != null) {
+                        for (long delId : updateDel.messageIds) {
+                            if (delId == currentPinnedMessage.id) {
+                                loadPinnedMessage();
+                                break;
+                            }
+                        }
+                    }
                 });
+            }
+        } else if (update instanceof TdApi.UpdateMessageIsPinned) {
+            TdApi.UpdateMessageIsPinned pinUpdate = (TdApi.UpdateMessageIsPinned) update;
+            if (pinUpdate.chatId == chatId) {
+                runOnUiThread(this::loadPinnedMessage);
             }
         } else if (update instanceof TdApi.UpdateChatReadOutbox) {
             TdApi.UpdateChatReadOutbox readOutbox = (TdApi.UpdateChatReadOutbox) update;
             if (readOutbox.chatId == chatId) {
                 runOnUiThread(() -> messageAdapter.setLastReadOutboxMessageId(readOutbox.lastReadOutboxMessageId));
-            }
-        } else if (update instanceof TdApi.UpdateChatReadInbox) {
-            TdApi.UpdateChatReadInbox readInbox = (TdApi.UpdateChatReadInbox) update;
-            if (readInbox.chatId == chatId) {
-                // Read inbox position updated
             }
         } else if (update instanceof TdApi.UpdateFile) {
             TdApi.UpdateFile fileUpdate = (TdApi.UpdateFile) update;
@@ -519,6 +1066,71 @@ public class ChatActivity extends AppCompatActivity {
         if (activeClient != null) {
             activeClient.removeRawUpdateListener(rawUpdateListener);
             activeClient.send(new TdApi.CloseChat(chatId), null);
+        }
+    }
+
+    // ==========================================
+    // FORWARD DESTINATION ADAPTER
+    // ==========================================
+
+    private static class ForwardChatAdapter extends RecyclerView.Adapter<ForwardChatAdapter.ViewHolder> {
+        interface OnChatClickListener {
+            void onChatClick(TdApi.Chat chat);
+        }
+
+        private final List<TdApi.Chat> chats;
+        private final OnChatClickListener listener;
+
+        ForwardChatAdapter(List<TdApi.Chat> chats, OnChatClickListener listener) {
+            this.chats = chats;
+            this.listener = listener;
+        }
+
+        @NonNull
+        @Override
+        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_forward_chat, parent, false);
+            return new ViewHolder(v);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+            TdApi.Chat chat = chats.get(position);
+            holder.tvTitle.setText(chat.title != null ? chat.title : "Chat");
+            holder.tvInitials.setText(TelegramAvatarHelper.getInitials(chat.title));
+            int color = TelegramAvatarHelper.getAvatarColor(chat.id);
+            holder.ivAvatarCircle.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+
+            if (chat.type instanceof TdApi.ChatTypeSupergroup) {
+                TdApi.ChatTypeSupergroup sg = (TdApi.ChatTypeSupergroup) chat.type;
+                holder.tvSubtitle.setText(sg.isChannel ? "channel" : "group");
+            } else if (chat.type instanceof TdApi.ChatTypeBasicGroup) {
+                holder.tvSubtitle.setText("group");
+            } else {
+                holder.tvSubtitle.setText("private chat");
+            }
+
+            holder.itemView.setOnClickListener(v -> listener.onChatClick(chat));
+        }
+
+        @Override
+        public int getItemCount() {
+            return chats.size();
+        }
+
+        static class ViewHolder extends RecyclerView.ViewHolder {
+            final ImageView ivAvatarCircle;
+            final TextView tvInitials;
+            final TextView tvTitle;
+            final TextView tvSubtitle;
+
+            ViewHolder(@NonNull View itemView) {
+                super(itemView);
+                ivAvatarCircle = itemView.findViewById(R.id.ivForwardAvatarCircle);
+                tvInitials = itemView.findViewById(R.id.tvForwardAvatarInitials);
+                tvTitle = itemView.findViewById(R.id.tvForwardChatTitle);
+                tvSubtitle = itemView.findViewById(R.id.tvForwardChatSubtitle);
+            }
         }
     }
 }
