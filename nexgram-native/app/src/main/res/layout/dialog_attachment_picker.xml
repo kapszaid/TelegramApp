@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_bottom_sheet"
+    android:paddingTop="12dp"
+    android:paddingBottom="24dp">
+
+    <!-- Top Grabber Handle -->
+    <View
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:background="#3A4D60"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Share Media or File"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="12dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <!-- Gallery / Photo Option -->
+        <LinearLayout
+            android:id="@+id/btnAttachGallery"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?android:attr/selectableItemBackground"
+            android:padding="8dp">
+
+            <FrameLayout
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_avatar"
+                app:tint="#007EE5">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_attach_gallery"
+                    app:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Gallery"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- Video Option -->
+        <LinearLayout
+            android:id="@+id/btnAttachVideo"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?android:attr/selectableItemBackground"
+            android:padding="8dp">
+
+            <FrameLayout
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_avatar"
+                app:tint="#E53935">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_attach_video"
+                    app:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Video"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- Document / File Option -->
+        <LinearLayout
+            android:id="@+id/btnAttachFile"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?android:attr/selectableItemBackground"
+            android:padding="8dp">
+
+            <FrameLayout
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_avatar"
+                app:tint="#43A047">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_attach_document"
+                    app:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="File"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

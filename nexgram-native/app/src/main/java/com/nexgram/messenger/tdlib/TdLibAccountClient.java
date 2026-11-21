@@ -550,4 +550,59 @@ public class TdLibAccountClient {
     public void getChatPinnedMessage(long chatId, Client.ResultHandler handler) {
         send(new TdApi.GetChatPinnedMessage(chatId), handler);
     }
+
+    /**
+     * Sends a photo message through TDLib.
+     */
+    public void sendPhoto(long chatId, long replyToMessageId, String filePath, int width, int height, String caption, Client.ResultHandler handler) {
+        TdApi.InputFile photoFile = new TdApi.InputFileLocal(filePath);
+        TdApi.InputPhoto inputPhoto = new TdApi.InputPhoto(photoFile, null, null, new int[0], width, height);
+        TdApi.FormattedText captionFormatted = (caption != null && !caption.isEmpty())
+            ? new TdApi.FormattedText(caption, new TdApi.TextEntity[0])
+            : null;
+        TdApi.InputMessagePhoto content = new TdApi.InputMessagePhoto(inputPhoto, captionFormatted, false, null, false);
+        TdApi.InputMessageReplyTo replyTo = (replyToMessageId > 0)
+            ? new TdApi.InputMessageReplyToMessage(replyToMessageId, null, 0, null)
+            : null;
+        send(new TdApi.SendMessage(chatId, null, replyTo, null, null, content), handler);
+    }
+
+    /**
+     * Sends a video message through TDLib.
+     */
+    public void sendVideo(long chatId, long replyToMessageId, String filePath, int duration, int width, int height, String caption, Client.ResultHandler handler) {
+        TdApi.InputFile videoFile = new TdApi.InputFileLocal(filePath);
+        TdApi.InputVideo inputVideo = new TdApi.InputVideo(videoFile, null, null, 0, new int[0], duration, width, height, true);
+        TdApi.FormattedText captionFormatted = (caption != null && !caption.isEmpty())
+            ? new TdApi.FormattedText(caption, new TdApi.TextEntity[0])
+            : null;
+        TdApi.InputMessageVideo content = new TdApi.InputMessageVideo(inputVideo, captionFormatted, false, null, false);
+        TdApi.InputMessageReplyTo replyTo = (replyToMessageId > 0)
+            ? new TdApi.InputMessageReplyToMessage(replyToMessageId, null, 0, null)
+            : null;
+        send(new TdApi.SendMessage(chatId, null, replyTo, null, null, content), handler);
+    }
+
+    /**
+     * Sends a document / file through TDLib.
+     */
+    public void sendDocument(long chatId, long replyToMessageId, String filePath, String caption, Client.ResultHandler handler) {
+        TdApi.InputFile docFile = new TdApi.InputFileLocal(filePath);
+        TdApi.InputDocument inputDoc = new TdApi.InputDocument(docFile, null, false);
+        TdApi.FormattedText captionFormatted = (caption != null && !caption.isEmpty())
+            ? new TdApi.FormattedText(caption, new TdApi.TextEntity[0])
+            : null;
+        TdApi.InputMessageDocument content = new TdApi.InputMessageDocument(inputDoc, captionFormatted);
+        TdApi.InputMessageReplyTo replyTo = (replyToMessageId > 0)
+            ? new TdApi.InputMessageReplyToMessage(replyToMessageId, null, 0, null)
+            : null;
+        send(new TdApi.SendMessage(chatId, null, replyTo, null, null, content), handler);
+    }
+
+    /**
+     * Cancels an active or pending TDLib file download.
+     */
+    public void cancelDownloadFile(int fileId, boolean onlyIfPending, Client.ResultHandler handler) {
+        send(new TdApi.CancelDownloadFile(fileId, onlyIfPending), handler);
+    }
 }

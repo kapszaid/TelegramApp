@@ -5,7 +5,9 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.graphics.PorterDuff;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -14,6 +16,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -22,6 +25,8 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
@@ -40,7 +45,10 @@ import com.nexgram.messenger.tdlib.TdLibAccountClient;
 import com.nexgram.messenger.tdlib.TdLibManager;
 import com.nexgram.messenger.ui.adapter.MessageAdapter;
 import com.nexgram.messenger.ui.helpers.TelegramAvatarHelper;
+import com.nexgram.messenger.ui.helpers.TelegramDateFormatter;
+import com.nexgram.messenger.ui.helpers.TelegramMediaHelper;
 import com.nexgram.messenger.ui.helpers.TelegramMessageFormatter;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -129,6 +137,34 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
     private TdApi.Message replyingToMessage = null;
     private TdApi.Message editingMessage = null;
     private TdApi.Message currentPinnedMessage = null;
+
+    // Media attachment pickers
+    private final ActivityResultLauncher<String> pickPhotoLauncher = registerForActivityResult(
+        new ActivityResultContracts.GetContent(),
+        uri -> {
+            if (uri != null) {
+                handleSelectedMediaUri(uri, "image");
+            }
+        }
+    );
+
+    private final ActivityResultLauncher<String> pickVideoLauncher = registerForActivityResult(
+        new ActivityResultContracts.GetContent(),
+        uri -> {
+            if (uri != null) {
+                handleSelectedMediaUri(uri, "video");
+            }
+        }
+    );
+
+    private final ActivityResultLauncher<String> pickDocumentLauncher = registerForActivityResult(
+        new ActivityResultContracts.GetContent(),
+        uri -> {
+            if (uri != null) {
+                handleSelectedMediaUri(uri, "document");
+            }
+        }
+    );
 
     private final TdLibAccountClient.RawUpdateListener rawUpdateListener = this::handleIncomingTdlibUpdate;
 
@@ -312,9 +348,7 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
             Toast.makeText(this, "Stickers and emojis", Toast.LENGTH_SHORT).show()
         );
 
-        btnAttach.setOnClickListener(v ->
-            Toast.makeText(this, "Attach media or files", Toast.LENGTH_SHORT).show()
-        );
+        btnAttach.setOnClickListener(v -> showAttachmentPicker());
 
         etMessageInput.addTextChangedListener(new TextWatcher() {
             @Override
@@ -595,6 +629,128 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
     }
 
     // ==========================================
+    // MEDIA ATTACHMENTS & SENDING (Milestone 2.8)
+    // ==========================================
+
+    private void showAttachmentPicker() {
+        BottomSheetDialog dialog = new BottomSheetDialog(this);
+        View sheet = LayoutInflater.from(this).inflate(R.layout.dialog_attachment_picker, null);
+        dialog.setContentView(sheet);
+
+        sheet.findViewById(R.id.btnAttachGallery).setOnClickListener(v -> {
+            dialog.dismiss();
+            pickPhotoLauncher.launch("image/*");
+        });
+
+        sheet.findViewById(R.id.btnAttachVideo).setOnClickListener(v -> {
+            dialog.dismiss();
+            pickVideoLauncher.launch("video/*");
+        });
+
+        sheet.findViewById(R.id.btnAttachFile).setOnClickListener(v -> {
+            dialog.dismiss();
+            pickDocumentLauncher.launch("*/*");
+        });
+
+        dialog.show();
+    }
+
+    private void handleSelectedMediaUri(Uri uri, String mediaType) {
+        if (uri == null) return;
+        new Thread(() -> {
+            String originalName = TelegramMediaHelper.getFileName(this, uri);
+            File cachedFile = TelegramMediaHelper.copyUriToCache(this, uri, originalName);
+            if (cachedFile == null || !cachedFile.exists()) {
+                runOnUiThread(() -> Toast.makeText(this, "Failed to read file", Toast.LENGTH_SHORT).show());
+                return;
+            }
+
+            runOnUiThread(() -> showMediaSendPreviewDialog(cachedFile, mediaType, originalName));
+        }).start();
+    }
+
+    private void showMediaSendPreviewDialog(File cachedFile, String mediaType, String fileName) {
+        BottomSheetDialog previewDialog = new BottomSheetDialog(this);
+        View view = LayoutInflater.from(this).inflate(R.layout.dialog_media_send_preview, null);
+        previewDialog.setContentView(view);
+
+        ImageView ivPreviewPhoto = view.findViewById(R.id.ivSendPreviewPhoto);
+        LinearLayout layoutPreviewDoc = view.findViewById(R.id.layoutSendPreviewDoc);
+        TextView tvDocName = view.findViewById(R.id.tvSendPreviewFileName);
+        TextView tvDocSize = view.findViewById(R.id.tvSendPreviewFileSize);
+        EditText etCaption = view.findViewById(R.id.etSendPreviewCaption);
+        View btnCancel = view.findViewById(R.id.btnSendPreviewCancel);
+        View btnSend = view.findViewById(R.id.btnSendPreviewConfirm);
+
+        if ("image".equals(mediaType)) {
+            ivPreviewPhoto.setVisibility(View.VISIBLE);
+            layoutPreviewDoc.setVisibility(View.GONE);
+            android.graphics.Bitmap bm = TelegramMediaHelper.decodeSampledBitmap(cachedFile.getAbsolutePath(), 600, 400);
+            if (bm != null) {
+                ivPreviewPhoto.setImageBitmap(bm);
+            }
+        } else if ("video".equals(mediaType)) {
+            ivPreviewPhoto.setVisibility(View.VISIBLE);
+            layoutPreviewDoc.setVisibility(View.GONE);
+            android.graphics.Bitmap bm = TelegramMediaHelper.decodeSampledBitmap(cachedFile.getAbsolutePath(), 600, 400);
+            if (bm != null) {
+                ivPreviewPhoto.setImageBitmap(bm);
+            } else {
+                ivPreviewPhoto.setImageResource(R.drawable.ic_attach_video);
+            }
+        } else {
+            ivPreviewPhoto.setVisibility(View.GONE);
+            layoutPreviewDoc.setVisibility(View.VISIBLE);
+            tvDocName.setText(fileName);
+            tvDocSize.setText(TelegramMediaHelper.formatFileSize(cachedFile.length()));
+        }
+
+        btnCancel.setOnClickListener(v -> previewDialog.dismiss());
+
+        btnSend.setOnClickListener(v -> {
+            String caption = etCaption.getText().toString().trim();
+            previewDialog.dismiss();
+            sendMediaMessage(cachedFile, mediaType, caption);
+        });
+
+        previewDialog.show();
+    }
+
+    private void sendMediaMessage(File cachedFile, String mediaType, String caption) {
+        if (activeClient == null || cachedFile == null) return;
+
+        long replyToId = (replyingToMessage != null) ? replyingToMessage.id : 0;
+        cancelReplyMode();
+
+        String filePath = cachedFile.getAbsolutePath();
+
+        if ("image".equals(mediaType)) {
+            TelegramMediaHelper.MediaDimensions dims = TelegramMediaHelper.getImageDimensions(filePath);
+            activeClient.sendPhoto(chatId, replyToId, filePath, dims.width, dims.height, caption, result -> {
+                if (result instanceof TdApi.Error) {
+                    TdApi.Error err = (TdApi.Error) result;
+                    runOnUiThread(() -> Toast.makeText(this, "Failed to send photo: " + err.message, Toast.LENGTH_SHORT).show());
+                }
+            });
+        } else if ("video".equals(mediaType)) {
+            TelegramMediaHelper.MediaDimensions dims = TelegramMediaHelper.getVideoMetadata(filePath);
+            activeClient.sendVideo(chatId, replyToId, filePath, dims.duration, dims.width, dims.height, caption, result -> {
+                if (result instanceof TdApi.Error) {
+                    TdApi.Error err = (TdApi.Error) result;
+                    runOnUiThread(() -> Toast.makeText(this, "Failed to send video: " + err.message, Toast.LENGTH_SHORT).show());
+                }
+            });
+        } else {
+            activeClient.sendDocument(chatId, replyToId, filePath, caption, result -> {
+                if (result instanceof TdApi.Error) {
+                    TdApi.Error err = (TdApi.Error) result;
+                    runOnUiThread(() -> Toast.makeText(this, "Failed to send file: " + err.message, Toast.LENGTH_SHORT).show());
+                }
+            });
+        }
+    }
+
+    // ==========================================
     // MESSAGE ACTIONS (Milestone 2.7)
     // ==========================================
 
@@ -616,6 +772,32 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
     @Override
     public void onSelectionChanged(int selectedCount) {
         updateSelectionToolbar(selectedCount);
+    }
+
+    @Override
+    public void onMediaClicked(TdApi.Message message, TdApi.File file, String mimeType) {
+        if (file == null || file.local == null || !file.local.isDownloadingCompleted || file.local.path == null || file.local.path.isEmpty()) {
+            return;
+        }
+
+        if (message.content instanceof TdApi.MessageDocument) {
+            TelegramMediaHelper.openFileWithSystem(this, file.local.path, mimeType);
+        } else {
+            Intent intent = new Intent(this, MediaViewerActivity.class);
+            intent.putExtra("file_path", file.local.path);
+            intent.putExtra("mime_type", mimeType);
+            intent.putExtra("title", chatTitle);
+            intent.putExtra("subtitle", TelegramDateFormatter.formatChatTimestamp(message.date));
+            intent.putExtra("caption", getMessageCaption(message));
+            startActivity(intent);
+        }
+    }
+
+    @Override
+    public void onDownloadClicked(TdApi.Message message, int fileId) {
+        if (activeClient != null && fileId > 0) {
+            activeClient.downloadFile(fileId, 1, null);
+        }
     }
 
     private void updateSelectionToolbar(int selectedCount) {
@@ -947,6 +1129,21 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
         }
     }
 
+    private String getMessageCaption(TdApi.Message msg) {
+        if (msg == null || msg.content == null) return "";
+        if (msg.content instanceof TdApi.MessagePhoto) {
+            TdApi.MessagePhoto p = (TdApi.MessagePhoto) msg.content;
+            return p.caption != null && p.caption.text != null ? p.caption.text : "";
+        } else if (msg.content instanceof TdApi.MessageVideo) {
+            TdApi.MessageVideo v = (TdApi.MessageVideo) msg.content;
+            return v.caption != null && v.caption.text != null ? v.caption.text : "";
+        } else if (msg.content instanceof TdApi.MessageDocument) {
+            TdApi.MessageDocument d = (TdApi.MessageDocument) msg.content;
+            return d.caption != null && d.caption.text != null ? d.caption.text : "";
+        }
+        return "";
+    }
+
     private String getMessageText(TdApi.Message msg) {
         if (msg == null || msg.content == null) return "";
         if (msg.content instanceof TdApi.MessageText) {
@@ -954,6 +1151,10 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
             if (textMsg.text != null && textMsg.text.text != null) {
                 return textMsg.text.text;
             }
+        }
+        String caption = getMessageCaption(msg);
+        if (!caption.isEmpty()) {
+            return caption;
         }
         return TelegramMessageFormatter.formatMessagePreview(msg);
     }
@@ -1054,9 +1255,12 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
             }
         } else if (update instanceof TdApi.UpdateFile) {
             TdApi.UpdateFile fileUpdate = (TdApi.UpdateFile) update;
-            if (fileUpdate.file.id == avatarFileId && fileUpdate.file.local.isDownloadingCompleted) {
-                runOnUiThread(() -> loadAvatarPhoto(fileUpdate.file.local.path));
-            }
+            runOnUiThread(() -> {
+                messageAdapter.onFileUpdated(fileUpdate.file);
+                if (fileUpdate.file.id == avatarFileId && fileUpdate.file.local.isDownloadingCompleted) {
+                    loadAvatarPhoto(fileUpdate.file.local.path);
+                }
+            });
         }
     }
 

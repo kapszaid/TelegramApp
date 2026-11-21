@@ -696,4 +696,179 @@ public class TdLibIntegrationTest {
         assertEquals(0, adapter.getSelectedCount());
         assertFalse(adapter.isSelectionMode());
     }
+
+    // ==========================================
+    // MILESTONE 2.8 MEDIA TESTS
+    // ==========================================
+
+    @Test
+    public void testPhotoRequestConstruction() {
+        String testPath = "/storage/emulated/0/DCIM/photo.jpg";
+        int width = 1280;
+        int height = 720;
+        String captionText = "Test photo caption";
+
+        TdApi.InputFile photoFile = new TdApi.InputFileLocal(testPath);
+        assertEquals(TdApi.InputFileLocal.CONSTRUCTOR, photoFile.getConstructor());
+        assertEquals(testPath, ((TdApi.InputFileLocal) photoFile).path);
+
+        TdApi.InputPhoto inputPhoto = new TdApi.InputPhoto(photoFile, null, null, new int[0], width, height);
+        assertEquals(TdApi.InputPhoto.CONSTRUCTOR, inputPhoto.getConstructor());
+        assertEquals(width, inputPhoto.width);
+        assertEquals(height, inputPhoto.height);
+
+        TdApi.FormattedText captionFormatted = new TdApi.FormattedText(captionText, new TdApi.TextEntity[0]);
+        TdApi.InputMessagePhoto content = new TdApi.InputMessagePhoto(inputPhoto, captionFormatted, false, null, false);
+        assertEquals(TdApi.InputMessagePhoto.CONSTRUCTOR, content.getConstructor());
+        assertNotNull(content.photo);
+        assertNotNull(content.caption);
+        assertEquals(captionText, content.caption.text);
+
+        TdApi.SendMessage sendRequest = new TdApi.SendMessage(123456L, null, null, null, null, content);
+        assertEquals(TdApi.SendMessage.CONSTRUCTOR, sendRequest.getConstructor());
+        assertEquals(123456L, sendRequest.chatId);
+        assertTrue(sendRequest.inputMessageContent instanceof TdApi.InputMessagePhoto);
+    }
+
+    @Test
+    public void testVideoRequestConstruction() {
+        String testPath = "/storage/emulated/0/Movies/video.mp4";
+        int duration = 45;
+        int width = 1920;
+        int height = 1080;
+        String captionText = "Sunset at the beach";
+
+        TdApi.InputFile videoFile = new TdApi.InputFileLocal(testPath);
+        TdApi.InputVideo inputVideo = new TdApi.InputVideo(videoFile, null, null, 0, new int[0], duration, width, height, true);
+        assertEquals(TdApi.InputVideo.CONSTRUCTOR, inputVideo.getConstructor());
+        assertEquals(duration, inputVideo.duration);
+        assertEquals(width, inputVideo.width);
+        assertEquals(height, inputVideo.height);
+        assertTrue(inputVideo.supportsStreaming);
+
+        TdApi.FormattedText captionFormatted = new TdApi.FormattedText(captionText, new TdApi.TextEntity[0]);
+        TdApi.InputMessageVideo content = new TdApi.InputMessageVideo(inputVideo, captionFormatted, false, null, false);
+        assertEquals(TdApi.InputMessageVideo.CONSTRUCTOR, content.getConstructor());
+        assertNotNull(content.video);
+        assertEquals(captionText, content.caption.text);
+
+        TdApi.InputMessageReplyTo replyTo = new TdApi.InputMessageReplyToMessage(999L, null, 0, null);
+        TdApi.SendMessage sendRequest = new TdApi.SendMessage(777L, null, replyTo, null, null, content);
+        assertEquals(TdApi.SendMessage.CONSTRUCTOR, sendRequest.getConstructor());
+        assertTrue(sendRequest.replyTo instanceof TdApi.InputMessageReplyToMessage);
+        assertEquals(999L, ((TdApi.InputMessageReplyToMessage) sendRequest.replyTo).messageId);
+    }
+
+    @Test
+    public void testDocumentRequestConstruction() {
+        String testPath = "/storage/emulated/0/Download/report.pdf";
+        String captionText = "Q4 Financial Report";
+
+        TdApi.InputFile docFile = new TdApi.InputFileLocal(testPath);
+        TdApi.InputDocument inputDoc = new TdApi.InputDocument(docFile, null, false);
+        assertEquals(TdApi.InputDocument.CONSTRUCTOR, inputDoc.getConstructor());
+        assertFalse(inputDoc.disableContentTypeDetection);
+
+        TdApi.FormattedText captionFormatted = new TdApi.FormattedText(captionText, new TdApi.TextEntity[0]);
+        TdApi.InputMessageDocument content = new TdApi.InputMessageDocument(inputDoc, captionFormatted);
+        assertEquals(TdApi.InputMessageDocument.CONSTRUCTOR, content.getConstructor());
+        assertNotNull(content.document);
+        assertEquals(captionText, content.caption.text);
+
+        TdApi.SendMessage sendRequest = new TdApi.SendMessage(888L, null, null, null, null, content);
+        assertEquals(TdApi.SendMessage.CONSTRUCTOR, sendRequest.getConstructor());
+        assertTrue(sendRequest.inputMessageContent instanceof TdApi.InputMessageDocument);
+    }
+
+    @Test
+    public void testCancelDownloadFileRequest() {
+        int fileId = 4242;
+        TdApi.CancelDownloadFile cancel = new TdApi.CancelDownloadFile(fileId, false);
+        assertEquals(TdApi.CancelDownloadFile.CONSTRUCTOR, cancel.getConstructor());
+        assertEquals(fileId, cancel.fileId);
+        assertFalse(cancel.onlyIfPending);
+
+        TdApi.CancelDownloadFile cancelPendingOnly = new TdApi.CancelDownloadFile(fileId, true);
+        assertTrue(cancelPendingOnly.onlyIfPending);
+    }
+
+    @Test
+    public void testFileUpdateReconciliationAndDownloadStates() {
+        com.nexgram.messenger.ui.adapter.MessageAdapter adapter = new com.nexgram.messenger.ui.adapter.MessageAdapter(null);
+
+        // Create a MessagePhoto
+        int fileId = 1001;
+        TdApi.File photoFile = new TdApi.File();
+        photoFile.id = fileId;
+        photoFile.size = 204800;
+        photoFile.expectedSize = 204800;
+        photoFile.local = new TdApi.LocalFile("/data/user/0/com.nexgram.messenger/cache/photo_thumb.jpg", true, false, false, true, 0, 204800, 204800);
+
+        TdApi.PhotoSize[] sizes = new TdApi.PhotoSize[1];
+        sizes[0] = new TdApi.PhotoSize("m", photoFile, 800, 600, new int[0]);
+        TdApi.Photo photo = new TdApi.Photo(false, null, sizes);
+
+        TdApi.Message m = new TdApi.Message();
+        m.id = 701L;
+        m.chatId = 12345L;
+        m.date = 1700000000;
+        TdApi.MessagePhoto msgPhoto = new TdApi.MessagePhoto();
+        msgPhoto.photo = photo;
+        msgPhoto.caption = new TdApi.FormattedText("Scenic Mountain", new TdApi.TextEntity[0]);
+        m.content = msgPhoto;
+
+        adapter.setMessages(Collections.singletonList(m));
+        assertEquals(1, adapter.getMessageCount());
+
+        // Now dispatch a file update where downloading completed
+        TdApi.File updatedFile = new TdApi.File();
+        updatedFile.id = fileId;
+        updatedFile.size = 204800;
+        updatedFile.local = new TdApi.LocalFile("/data/user/0/com.nexgram.messenger/files/full_photo.jpg", false, false, true, true, 0, 204800, 204800);
+
+        adapter.onFileUpdated(updatedFile);
+        // Ensure adapter maintains message count and contains the updated message
+        assertEquals(1, adapter.getMessageCount());
+        assertTrue(adapter.containsMessage(701L));
+    }
+
+    @Test
+    public void testMediaCaptionAndPreviewFormatting() {
+        // MessagePhoto with caption
+        TdApi.Photo photo = new TdApi.Photo(false, null, new TdApi.PhotoSize[0]);
+        TdApi.Message mPhoto = new TdApi.Message();
+        TdApi.MessagePhoto photoWithCaption = new TdApi.MessagePhoto();
+        photoWithCaption.photo = photo;
+        photoWithCaption.caption = new TdApi.FormattedText("Vacation photo", new TdApi.TextEntity[0]);
+        mPhoto.content = photoWithCaption;
+        assertEquals("📷 Vacation photo", com.nexgram.messenger.ui.helpers.TelegramMessageFormatter.formatMessagePreview(mPhoto));
+
+        // MessagePhoto without caption
+        TdApi.Message mPhotoNoCaption = new TdApi.Message();
+        TdApi.MessagePhoto photoNoCaption = new TdApi.MessagePhoto();
+        photoNoCaption.photo = photo;
+        mPhotoNoCaption.content = photoNoCaption;
+        assertEquals("📷 Photo", com.nexgram.messenger.ui.helpers.TelegramMessageFormatter.formatMessagePreview(mPhotoNoCaption));
+
+        // MessageVideo with caption
+        TdApi.Video video = new TdApi.Video();
+        video.duration = 60;
+        video.fileName = "clip.mp4";
+        TdApi.Message mVideo = new TdApi.Message();
+        TdApi.MessageVideo videoWithCaption = new TdApi.MessageVideo();
+        videoWithCaption.video = video;
+        videoWithCaption.caption = new TdApi.FormattedText("Check this out", new TdApi.TextEntity[0]);
+        mVideo.content = videoWithCaption;
+        assertEquals("📹 Check this out", com.nexgram.messenger.ui.helpers.TelegramMessageFormatter.formatMessagePreview(mVideo));
+
+        // MessageDocument with caption
+        TdApi.Document doc = new TdApi.Document();
+        doc.fileName = "contract.pdf";
+        TdApi.Message mDoc = new TdApi.Message();
+        TdApi.MessageDocument docWithCaption = new TdApi.MessageDocument();
+        docWithCaption.document = doc;
+        docWithCaption.caption = new TdApi.FormattedText("Signed document", new TdApi.TextEntity[0]);
+        mDoc.content = docWithCaption;
+        assertEquals("📄 contract.pdf", com.nexgram.messenger.ui.helpers.TelegramMessageFormatter.formatMessagePreview(mDoc));
+    }
 }

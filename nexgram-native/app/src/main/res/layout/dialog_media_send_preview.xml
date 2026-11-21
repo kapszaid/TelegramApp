@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_bottom_sheet"
+    android:padding="16dp">
+
+    <!-- Top Grabber -->
+    <View
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:background="#3A4D60"
+        android:layout_marginBottom="12dp" />
+
+    <!-- Preview Container -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="220dp"
+        android:background="#0E1621">
+
+        <ImageView
+            android:id="@+id/ivSendPreviewPhoto"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/layoutSendPreviewDoc"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@drawable/ic_document_file"
+                app:tint="@color/primary" />
+
+            <TextView
+                android:id="@+id/tvSendPreviewFileName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:maxLines="2"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp" />
+
+            <TextView
+                android:id="@+id/tvSendPreviewFileSize"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#7F91A4"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Caption Input -->
+    <EditText
+        android:id="@+id/etSendPreviewCaption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="44dp"
+        android:background="@drawable/bg_input_bar"
+        android:hint="Add a caption..."
+        android:textColor="#FFFFFF"
+        android:textColorHint="#7F91A4"
+        android:textSize="15sp"
+        android:padding="10dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp" />
+
+    <!-- Action Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end">
+
+        <Button
+            android:id="@+id/btnSendPreviewCancel"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:text="Cancel"
+            android:textColor="#7F91A4"
+            android:background="?android:attr/selectableItemBackground"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnSendPreviewConfirm"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:text="Send"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="@color/primary" />
+    </LinearLayout>
+
+</LinearLayout>

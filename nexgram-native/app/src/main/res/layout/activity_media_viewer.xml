@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/viewerRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- Center Photo Content -->
+    <ImageView
+        android:id="@+id/ivViewerPhoto"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
+    <!-- Center Video Content -->
+    <FrameLayout
+        android:id="@+id/flViewerVideo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <VideoView
+            android:id="@+id/videoView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center" />
+
+        <ImageView
+            android:id="@+id/btnVideoPlayPause"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_gravity="center"
+            android:src="@drawable/bg_media_play_circle" />
+
+        <ImageView
+            android:id="@+id/ivVideoPlayPauseIcon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_play"
+            app:tint="#FFFFFF" />
+    </FrameLayout>
+
+    <!-- Center Loading Spinner -->
+    <ProgressBar
+        android:id="@+id/pbViewerLoading"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center"
+        android:indeterminateTint="#FFFFFF"
+        android:visibility="gone" />
+
+    <!-- Top Overlay Toolbar -->
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/viewerToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:layout_gravity="top"
+        android:background="#80000000"
+        android:contentInsetStart="0dp"
+        android:contentInsetLeft="0dp"
+        app:contentInsetStart="0dp"
+        app:contentInsetLeft="0dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="12dp">
+
+            <ImageView
+                android:id="@+id/btnViewerBack"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_back_arrow"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                app:tint="#FFFFFF"
+                android:contentDescription="Back" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="8dp">
+
+                <TextView
+                    android:id="@+id/tvViewerTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvViewerSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:textColor="#B0C0D0"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/btnViewerShare"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_share"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                app:tint="#FFFFFF"
+                android:contentDescription="Share" />
+
+            <ImageView
+                android:id="@+id/btnViewerDownload"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_download"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                app:tint="#FFFFFF"
+                android:contentDescription="Download" />
+        </LinearLayout>
+    </androidx.appcompat.widget.Toolbar>
+
+    <!-- Bottom Caption Overlay -->
+    <TextView
+        android:id="@+id/tvViewerCaption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#99000000"
+        android:padding="16dp"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+</FrameLayout>

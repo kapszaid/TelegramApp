@@ -6,6 +6,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -72,11 +73,14 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         void onMessageLongClicked(TdApi.Message message, int position);
         void onReplyClicked(long repliedMessageId);
         void onSelectionChanged(int selectedCount);
+        void onMediaClicked(TdApi.Message message, TdApi.File file, String mimeType);
+        void onDownloadClicked(TdApi.Message message, int fileId);
     }
 
     private final Context context;
     private final List<Item> items = new ArrayList<>();
     private final Set<Long> selectedMessageIds = new HashSet<>();
+    private final java.util.concurrent.ConcurrentHashMap<Integer, TdApi.File> fileCache = new java.util.concurrent.ConcurrentHashMap<>();
     private boolean isSelectionMode = false;
     private OnMessageInteractionListener interactionListener;
     private long lastReadOutboxMessageId = 0;
@@ -407,6 +411,55 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
     /**
+     * Handles TDLib UpdateFile. Updates local file cache and notifies affected items.
+     */
+    public synchronized void onFileUpdated(TdApi.File file) {
+        if (file == null) return;
+        fileCache.put(file.id, file);
+
+        for (int i = 0; i < items.size(); i++) {
+            Item it = items.get(i);
+            if (it instanceof MessageItem) {
+                TdApi.Message m = ((MessageItem) it).message;
+                if (messageContainsFile(m, file.id)) {
+                    safeNotifyItemChanged(i);
+                }
+            }
+        }
+    }
+
+    private boolean messageContainsFile(TdApi.Message m, int fileId) {
+        if (m == null || m.content == null) return false;
+        if (m.content instanceof TdApi.MessagePhoto) {
+            TdApi.Photo photo = ((TdApi.MessagePhoto) m.content).photo;
+            if (photo != null && photo.sizes != null) {
+                for (TdApi.PhotoSize sz : photo.sizes) {
+                    if (sz != null && sz.photo != null && sz.photo.id == fileId) return true;
+                }
+            }
+        } else if (m.content instanceof TdApi.MessageVideo) {
+            TdApi.Video video = ((TdApi.MessageVideo) m.content).video;
+            if (video != null) {
+                if (video.video != null && video.video.id == fileId) return true;
+                if (video.thumbnail != null && video.thumbnail.file != null && video.thumbnail.file.id == fileId) return true;
+            }
+        } else if (m.content instanceof TdApi.MessageDocument) {
+            TdApi.Document doc = ((TdApi.MessageDocument) m.content).document;
+            if (doc != null) {
+                if (doc.document != null && doc.document.id == fileId) return true;
+                if (doc.thumbnail != null && doc.thumbnail.file != null && doc.thumbnail.file.id == fileId) return true;
+            }
+        }
+        return false;
+    }
+
+    public TdApi.File getLatestFile(TdApi.File file) {
+        if (file == null) return null;
+        TdApi.File cached = fileCache.get(file.id);
+        return cached != null ? cached : file;
+    }
+
+    /**
      * Returns true if a message with the given TDLib 64-bit ID exists in the adapter.
      */
     public synchronized boolean containsMessage(long messageId) {
@@ -537,7 +590,12 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
     private void bindOutgoing(OutgoingViewHolder holder, TdApi.Message message) {
-        holder.tvMessageText.setText(getMessageContentText(message));
+        bindMediaViews(holder.layoutMediaContainer, holder.ivMediaPhoto, holder.flVideoOverlay,
+            holder.tvVideoDuration, holder.flMediaDownload, holder.pbMediaDownload,
+            holder.ivMediaDownloadIcon, holder.layoutDocumentContainer, holder.flDocAction,
+            holder.pbDocProgress, holder.ivDocIcon, holder.tvDocFileName, holder.tvDocFileSize,
+            holder.tvMessageText, message);
+
         holder.tvMessageTime.setText(formatTime(message.date));
         holder.tvEditedLabel.setVisibility(message.editDate > 0 ? View.VISIBLE : View.GONE);
 
@@ -584,7 +642,12 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
     private void bindIncoming(IncomingViewHolder holder, TdApi.Message message) {
-        holder.tvMessageText.setText(getMessageContentText(message));
+        bindMediaViews(holder.layoutMediaContainer, holder.ivMediaPhoto, holder.flVideoOverlay,
+            holder.tvVideoDuration, holder.flMediaDownload, holder.pbMediaDownload,
+            holder.ivMediaDownloadIcon, holder.layoutDocumentContainer, holder.flDocAction,
+            holder.pbDocProgress, holder.ivDocIcon, holder.tvDocFileName, holder.tvDocFileSize,
+            holder.tvMessageText, message);
+
         holder.tvMessageTime.setText(formatTime(message.date));
         holder.tvEditedLabel.setVisibility(message.editDate > 0 ? View.VISIBLE : View.GONE);
 
@@ -619,6 +682,186 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             holder.tvSenderName.setText(getSenderDisplayName(message.senderId));
         } else {
             holder.tvSenderName.setVisibility(View.GONE);
+        }
+    }
+
+    private void bindMediaViews(View layoutMediaContainer, ImageView ivMediaPhoto, View flVideoOverlay,
+                                TextView tvVideoDuration, View flMediaDownload, ProgressBar pbMediaDownload,
+                                ImageView ivMediaDownloadIcon, View layoutDocumentContainer, View flDocAction,
+                                ProgressBar pbDocProgress, ImageView ivDocIcon, TextView tvDocFileName,
+                                TextView tvDocFileSize, TextView tvMessageText, TdApi.Message message) {
+        if (message == null || message.content == null) {
+            layoutMediaContainer.setVisibility(View.GONE);
+            layoutDocumentContainer.setVisibility(View.GONE);
+            tvMessageText.setVisibility(View.VISIBLE);
+            tvMessageText.setText("");
+            return;
+        }
+
+        if (message.content instanceof TdApi.MessagePhoto) {
+            layoutMediaContainer.setVisibility(View.VISIBLE);
+            flVideoOverlay.setVisibility(View.GONE);
+            layoutDocumentContainer.setVisibility(View.GONE);
+
+            TdApi.Photo photo = ((TdApi.MessagePhoto) message.content).photo;
+            TdApi.FormattedText caption = ((TdApi.MessagePhoto) message.content).caption;
+
+            if (caption != null && caption.text != null && !caption.text.trim().isEmpty()) {
+                tvMessageText.setVisibility(View.VISIBLE);
+                tvMessageText.setText(caption.text);
+            } else {
+                tvMessageText.setVisibility(View.GONE);
+            }
+
+            if (photo != null && photo.sizes != null && photo.sizes.length > 0) {
+                TdApi.PhotoSize largest = photo.sizes[photo.sizes.length - 1];
+                TdApi.File file = getLatestFile(largest.photo);
+
+                if (file != null && file.local != null && file.local.isDownloadingCompleted &&
+                    file.local.path != null && !file.local.path.isEmpty()) {
+                    flMediaDownload.setVisibility(View.GONE);
+                    android.graphics.Bitmap bmp = com.nexgram.messenger.ui.helpers.TelegramMediaHelper.decodeSampledBitmap(file.local.path, 480, 480);
+                    if (bmp != null) {
+                        ivMediaPhoto.setImageBitmap(bmp);
+                    }
+                    layoutMediaContainer.setOnClickListener(v -> {
+                        if (isSelectionMode) {
+                            toggleSelection(message.id);
+                        } else if (interactionListener != null) {
+                            interactionListener.onMediaClicked(message, file, "image/jpeg");
+                        }
+                    });
+                } else {
+                    flMediaDownload.setVisibility(View.VISIBLE);
+                    ivMediaPhoto.setImageDrawable(null);
+                    boolean isDownloading = file != null && file.local != null && file.local.isDownloadingActive;
+                    pbMediaDownload.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
+                    ivMediaDownloadIcon.setVisibility(isDownloading ? View.GONE : View.VISIBLE);
+
+                    final int targetFileId = (file != null) ? file.id : 0;
+                    flMediaDownload.setOnClickListener(v -> {
+                        if (interactionListener != null && targetFileId > 0) {
+                            interactionListener.onDownloadClicked(message, targetFileId);
+                        }
+                    });
+                }
+            }
+        } else if (message.content instanceof TdApi.MessageVideo) {
+            layoutMediaContainer.setVisibility(View.VISIBLE);
+            layoutDocumentContainer.setVisibility(View.GONE);
+
+            TdApi.Video video = ((TdApi.MessageVideo) message.content).video;
+            TdApi.FormattedText caption = ((TdApi.MessageVideo) message.content).caption;
+
+            if (caption != null && caption.text != null && !caption.text.trim().isEmpty()) {
+                tvMessageText.setVisibility(View.VISIBLE);
+                tvMessageText.setText(caption.text);
+            } else {
+                tvMessageText.setVisibility(View.GONE);
+            }
+
+            if (video != null) {
+                tvVideoDuration.setText(com.nexgram.messenger.ui.helpers.TelegramMediaHelper.formatDuration(video.duration));
+
+                // Load thumbnail if available
+                if (video.thumbnail != null && video.thumbnail.file != null) {
+                    TdApi.File thumbFile = getLatestFile(video.thumbnail.file);
+                    if (thumbFile != null && thumbFile.local != null && thumbFile.local.isDownloadingCompleted &&
+                        thumbFile.local.path != null && !thumbFile.local.path.isEmpty()) {
+                        android.graphics.Bitmap thumbBmp = com.nexgram.messenger.ui.helpers.TelegramMediaHelper.decodeSampledBitmap(thumbFile.local.path, 480, 480);
+                        if (thumbBmp != null) {
+                            ivMediaPhoto.setImageBitmap(thumbBmp);
+                        }
+                    }
+                }
+
+                TdApi.File videoFile = getLatestFile(video.video);
+                if (videoFile != null && videoFile.local != null && videoFile.local.isDownloadingCompleted &&
+                    videoFile.local.path != null && !videoFile.local.path.isEmpty()) {
+                    flVideoOverlay.setVisibility(View.VISIBLE);
+                    flMediaDownload.setVisibility(View.GONE);
+
+                    layoutMediaContainer.setOnClickListener(v -> {
+                        if (isSelectionMode) {
+                            toggleSelection(message.id);
+                        } else if (interactionListener != null) {
+                            interactionListener.onMediaClicked(message, videoFile, video.mimeType);
+                        }
+                    });
+                } else {
+                    flVideoOverlay.setVisibility(View.GONE);
+                    flMediaDownload.setVisibility(View.VISIBLE);
+                    boolean isDownloading = videoFile != null && videoFile.local != null && videoFile.local.isDownloadingActive;
+                    pbMediaDownload.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
+                    ivMediaDownloadIcon.setVisibility(isDownloading ? View.GONE : View.VISIBLE);
+
+                    final int targetFileId = (videoFile != null) ? videoFile.id : 0;
+                    flMediaDownload.setOnClickListener(v -> {
+                        if (interactionListener != null && targetFileId > 0) {
+                            interactionListener.onDownloadClicked(message, targetFileId);
+                        }
+                    });
+                }
+            }
+        } else if (message.content instanceof TdApi.MessageDocument) {
+            layoutMediaContainer.setVisibility(View.GONE);
+            layoutDocumentContainer.setVisibility(View.VISIBLE);
+
+            TdApi.Document doc = ((TdApi.MessageDocument) message.content).document;
+            TdApi.FormattedText caption = ((TdApi.MessageDocument) message.content).caption;
+
+            if (caption != null && caption.text != null && !caption.text.trim().isEmpty()) {
+                tvMessageText.setVisibility(View.VISIBLE);
+                tvMessageText.setText(caption.text);
+            } else {
+                tvMessageText.setVisibility(View.GONE);
+            }
+
+            if (doc != null) {
+                tvDocFileName.setText(doc.fileName != null ? doc.fileName : "Document");
+                TdApi.File docFile = getLatestFile(doc.document);
+
+                if (docFile != null && docFile.local != null && docFile.local.isDownloadingCompleted &&
+                    docFile.local.path != null && !docFile.local.path.isEmpty()) {
+                    pbDocProgress.setVisibility(View.GONE);
+                    ivDocIcon.setVisibility(View.VISIBLE);
+                    ivDocIcon.setImageResource(R.drawable.ic_document_file);
+                    tvDocFileSize.setText(com.nexgram.messenger.ui.helpers.TelegramMediaHelper.formatFileSize(docFile.size));
+
+                    View.OnClickListener openListener = v -> {
+                        if (isSelectionMode) {
+                            toggleSelection(message.id);
+                        } else if (interactionListener != null) {
+                            interactionListener.onMediaClicked(message, docFile, doc.mimeType);
+                        }
+                    };
+                    layoutDocumentContainer.setOnClickListener(openListener);
+                    flDocAction.setOnClickListener(openListener);
+                } else {
+                    boolean isDownloading = docFile != null && docFile.local != null && docFile.local.isDownloadingActive;
+                    pbDocProgress.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
+                    ivDocIcon.setVisibility(isDownloading ? View.GONE : View.VISIBLE);
+                    ivDocIcon.setImageResource(R.drawable.ic_download);
+
+                    if (isDownloading && docFile != null && docFile.local != null) {
+                        tvDocFileSize.setText(com.nexgram.messenger.ui.helpers.TelegramMediaHelper.formatFileSize(docFile.local.downloadedSize) + " / " + com.nexgram.messenger.ui.helpers.TelegramMediaHelper.formatFileSize(docFile.size));
+                    } else if (docFile != null) {
+                        tvDocFileSize.setText(com.nexgram.messenger.ui.helpers.TelegramMediaHelper.formatFileSize(docFile.size));
+                    }
+
+                    final int targetFileId = (docFile != null) ? docFile.id : 0;
+                    flDocAction.setOnClickListener(v -> {
+                        if (interactionListener != null && targetFileId > 0) {
+                            interactionListener.onDownloadClicked(message, targetFileId);
+                        }
+                    });
+                }
+            }
+        } else {
+            layoutMediaContainer.setVisibility(View.GONE);
+            layoutDocumentContainer.setVisibility(View.GONE);
+            tvMessageText.setVisibility(View.VISIBLE);
+            tvMessageText.setText(getMessageContentText(message));
         }
     }
 
@@ -717,6 +960,21 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         final TextView tvReplyAuthor;
         final TextView tvReplyText;
 
+        final View layoutMediaContainer;
+        final ImageView ivMediaPhoto;
+        final View flVideoOverlay;
+        final TextView tvVideoDuration;
+        final View flMediaDownload;
+        final ProgressBar pbMediaDownload;
+        final ImageView ivMediaDownloadIcon;
+
+        final View layoutDocumentContainer;
+        final View flDocAction;
+        final ProgressBar pbDocProgress;
+        final ImageView ivDocIcon;
+        final TextView tvDocFileName;
+        final TextView tvDocFileSize;
+
         OutgoingViewHolder(@NonNull View itemView) {
             super(itemView);
             messageRoot = itemView.findViewById(R.id.messageRoot);
@@ -727,6 +985,21 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             layoutReplyBox = itemView.findViewById(R.id.layoutReplyBox);
             tvReplyAuthor = itemView.findViewById(R.id.tvReplyAuthor);
             tvReplyText = itemView.findViewById(R.id.tvReplyText);
+
+            layoutMediaContainer = itemView.findViewById(R.id.layoutMediaContainer);
+            ivMediaPhoto = itemView.findViewById(R.id.ivMediaPhoto);
+            flVideoOverlay = itemView.findViewById(R.id.flVideoOverlay);
+            tvVideoDuration = itemView.findViewById(R.id.tvVideoDuration);
+            flMediaDownload = itemView.findViewById(R.id.flMediaDownload);
+            pbMediaDownload = itemView.findViewById(R.id.pbMediaDownload);
+            ivMediaDownloadIcon = itemView.findViewById(R.id.ivMediaDownloadIcon);
+
+            layoutDocumentContainer = itemView.findViewById(R.id.layoutDocumentContainer);
+            flDocAction = itemView.findViewById(R.id.flDocAction);
+            pbDocProgress = itemView.findViewById(R.id.pbDocProgress);
+            ivDocIcon = itemView.findViewById(R.id.ivDocIcon);
+            tvDocFileName = itemView.findViewById(R.id.tvDocFileName);
+            tvDocFileSize = itemView.findViewById(R.id.tvDocFileSize);
         }
     }
 
@@ -740,6 +1013,21 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         final TextView tvReplyAuthor;
         final TextView tvReplyText;
 
+        final View layoutMediaContainer;
+        final ImageView ivMediaPhoto;
+        final View flVideoOverlay;
+        final TextView tvVideoDuration;
+        final View flMediaDownload;
+        final ProgressBar pbMediaDownload;
+        final ImageView ivMediaDownloadIcon;
+
+        final View layoutDocumentContainer;
+        final View flDocAction;
+        final ProgressBar pbDocProgress;
+        final ImageView ivDocIcon;
+        final TextView tvDocFileName;
+        final TextView tvDocFileSize;
+
         IncomingViewHolder(@NonNull View itemView) {
             super(itemView);
             messageRoot = itemView.findViewById(R.id.messageRoot);
@@ -750,6 +1038,21 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             layoutReplyBox = itemView.findViewById(R.id.layoutReplyBox);
             tvReplyAuthor = itemView.findViewById(R.id.tvReplyAuthor);
             tvReplyText = itemView.findViewById(R.id.tvReplyText);
+
+            layoutMediaContainer = itemView.findViewById(R.id.layoutMediaContainer);
+            ivMediaPhoto = itemView.findViewById(R.id.ivMediaPhoto);
+            flVideoOverlay = itemView.findViewById(R.id.flVideoOverlay);
+            tvVideoDuration = itemView.findViewById(R.id.tvVideoDuration);
+            flMediaDownload = itemView.findViewById(R.id.flMediaDownload);
+            pbMediaDownload = itemView.findViewById(R.id.pbMediaDownload);
+            ivMediaDownloadIcon = itemView.findViewById(R.id.ivMediaDownloadIcon);
+
+            layoutDocumentContainer = itemView.findViewById(R.id.layoutDocumentContainer);
+            flDocAction = itemView.findViewById(R.id.flDocAction);
+            pbDocProgress = itemView.findViewById(R.id.pbDocProgress);
+            ivDocIcon = itemView.findViewById(R.id.ivDocIcon);
+            tvDocFileName = itemView.findViewById(R.id.tvDocFileName);
+            tvDocFileSize = itemView.findViewById(R.id.tvDocFileSize);
         }
     }
 }

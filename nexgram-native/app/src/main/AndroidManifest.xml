@@ -46,6 +46,23 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Fullscreen Telegram Media Viewer -->
+        <activity
+            android:name=".ui.MediaViewerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize" />
+
+        <!-- Secure File Provider for Document and Media Sharing -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Native Background Sync Service -->
         <service
             android:name=".network.TelegramClientService"
