@@ -103,6 +103,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     private String currentSearchQuery = "";
     private boolean isSearching = false;
 
+    private final android.os.Handler filterDebounceHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable filterDebounceRunnable = this::applyFilterAndSort;
+
     private final TdLibAccountClient.RawUpdateListener rawUpdateListener = this::handleIncomingTdlibUpdate;
 
     @Override
@@ -418,12 +421,22 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     @Override
     protected void onResume() {
         super.onResume();
+        if (activeClient != null) {
+            activeClient.setOnline(true);
+        }
         syncActiveAccountAndChats();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        filterDebounceHandler.removeCallbacks(filterDebounceRunnable);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        filterDebounceHandler.removeCallbacks(filterDebounceRunnable);
         if (activeClient != null) {
             activeClient.removeRawUpdateListener(rawUpdateListener);
         }
@@ -456,6 +469,18 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             }
             this.activeClient = client;
             this.activeClient.addRawUpdateListener(rawUpdateListener);
+        }
+
+        // Keep online status active for real-time updates
+        this.activeClient.setOnline(true);
+
+        // Immediately populate from all known chats in memory for this client
+        java.util.List<TdApi.Chat> known = this.activeClient.getKnownChats();
+        if (!known.isEmpty()) {
+            for (TdApi.Chat c : known) {
+                allChatsMap.put(c.id, c);
+            }
+            applyFilterAndSort();
         }
 
         // Apply saved proxy configuration for this account if present
@@ -536,19 +561,41 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         } else if (update instanceof TdApi.UpdateChatPosition) {
             TdApi.UpdateChatPosition p = (TdApi.UpdateChatPosition) update;
             TdApi.Chat chat = allChatsMap.get(p.chatId);
+            if (chat == null && activeClient != null) {
+                chat = activeClient.getKnownChat(p.chatId);
+                if (chat != null) allChatsMap.put(chat.id, chat);
+            }
             if (chat != null) {
                 updateChatPosition(chat, p.position);
                 postApplyFilter();
+            } else if (activeClient != null) {
+                activeClient.getChat(p.chatId, res -> {
+                    if (res instanceof TdApi.Chat) {
+                        allChatsMap.put(((TdApi.Chat) res).id, (TdApi.Chat) res);
+                        postApplyFilter();
+                    }
+                });
             }
         } else if (update instanceof TdApi.UpdateChatLastMessage) {
             TdApi.UpdateChatLastMessage m = (TdApi.UpdateChatLastMessage) update;
             TdApi.Chat chat = allChatsMap.get(m.chatId);
+            if (chat == null && activeClient != null) {
+                chat = activeClient.getKnownChat(m.chatId);
+                if (chat != null) allChatsMap.put(chat.id, chat);
+            }
             if (chat != null) {
                 chat.lastMessage = m.lastMessage;
                 if (m.positions != null) {
                     chat.positions = m.positions;
                 }
                 postApplyFilter();
+            } else if (activeClient != null) {
+                activeClient.getChat(m.chatId, res -> {
+                    if (res instanceof TdApi.Chat) {
+                        allChatsMap.put(((TdApi.Chat) res).id, (TdApi.Chat) res);
+                        postApplyFilter();
+                    }
+                });
             }
         } else if (update instanceof TdApi.UpdateChatReadInbox) {
             TdApi.UpdateChatReadInbox r = (TdApi.UpdateChatReadInbox) update;
@@ -586,14 +633,11 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
                 chat.photo = p.photo;
                 postApplyFilter();
             }
-        } else if (update instanceof TdApi.UpdateFile) {
-            postApplyFilter();
         } else if (update instanceof TdApi.UpdateUser) {
-            // Update profile info if self
             TdApi.User user = ((TdApi.UpdateUser) update).user;
             AccountManager manager = NexGramApplication.getInstance().getAccountManager();
             AccountManager.AccountItem active = manager != null ? manager.getActiveAccount() : null;
-            if (active != null && user.id == Long.parseLong(active.id.replace("account_", ""))) {
+            if (active != null && user.id == active.telegramUserId) {
                 runOnUiThread(() -> updateDrawerProfile(active));
             }
         }
@@ -629,7 +673,8 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     }
 
     private void postApplyFilter() {
-        runOnUiThread(this::applyFilterAndSort);
+        filterDebounceHandler.removeCallbacks(filterDebounceRunnable);
+        filterDebounceHandler.postDelayed(filterDebounceRunnable, 80);
     }
 
     private synchronized void applyFilterAndSort() {

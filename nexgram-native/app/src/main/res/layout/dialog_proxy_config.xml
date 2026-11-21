@@ -1,125 +1,240 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="20dp"
     android:background="@color/bg_dark_card">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Connection Routing Mode"
-        android:textColor="@color/text_secondary"
-        android:textSize="12sp"
-        android:layout_marginBottom="4dp" />
-
-    <RadioGroup
-        android:id="@+id/rgProxyType"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="12dp">
-
-        <RadioButton
-            android:id="@+id/rbDirect"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Direct"
-            android:textColor="@color/text_primary"
-            android:layout_marginEnd="12dp" />
-
-        <RadioButton
-            android:id="@+id/rbSocks5"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="SOCKS5"
-            android:textColor="@color/text_primary"
-            android:checked="true"
-            android:layout_marginEnd="12dp" />
-
-        <RadioButton
-            android:id="@+id/rbMtproto"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="MTProto"
-            android:textColor="@color/text_primary" />
-    </RadioGroup>
-
-    <!-- Proxy Fields Container (Hidden when Direct is selected) -->
     <LinearLayout
-        android:id="@+id/layoutProxyFields"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:padding="20dp">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/tilProxyHost"
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Connection Routing Mode"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:layout_marginBottom="6dp" />
+
+        <!-- Routing Mode Selection: Direct, Saved Proxies, New Custom -->
+        <RadioGroup
+            android:id="@+id/rgRoutingMode"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Host Address (IP or domain)"
-            android:layout_marginBottom="8dp">
+            android:orientation="vertical"
+            android:layout_marginBottom="12dp">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etProxyHost"
-                android:layout_width="match_parent"
+            <RadioButton
+                android:id="@+id/rbModeDirect"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:inputType="textUri"
+                android:text="Direct Connection (No Proxy)"
                 android:textColor="@color/text_primary" />
-        </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/tilProxyPort"
+            <RadioButton
+                android:id="@+id/rbModeSaved"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Saved Proxies (Select from Library)"
+                android:textColor="@color/text_primary" />
+
+            <RadioButton
+                android:id="@+id/rbModeCustom"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Add New Custom Proxy"
+                android:textColor="@color/text_primary" />
+        </RadioGroup>
+
+        <!-- Container 1: Saved Proxies Library -->
+        <LinearLayout
+            android:id="@+id/layoutSavedProxiesContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Port (1 - 65535)"
+            android:orientation="vertical"
+            android:visibility="gone"
             android:layout_marginBottom="8dp">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etProxyPort"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Select Saved Proxy"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <Spinner
+                android:id="@+id/spSavedProxies"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_auth_input"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="number"
-                android:textColor="@color/text_primary" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/tilProxyUsername"
+                <TextView
+                    android:id="@+id/tvSavedProxyInfo"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="No saved proxy selected"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnDeleteSavedProxy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Delete"
+                    android:textColor="#E53935"
+                    style="@style/Widget.MaterialComponents.Button.TextButton" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Container 2: Custom Proxy Input Fields -->
+        <LinearLayout
+            android:id="@+id/layoutCustomProxyContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Username (Optional)"
+            android:orientation="vertical"
+            android:visibility="gone"
             android:layout_marginBottom="8dp">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etProxyUsername"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilProxyName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="text"
-                android:textColor="@color/text_primary" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:hint="Proxy Name / Label (e.g. UK SOCKS5 London)"
+                android:layout_marginBottom="8dp">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/tilProxySecret"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Password or MTProto Secret (Optional)"
-            android:layout_marginBottom="8dp">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etProxyName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text"
+                    android:textColor="@color/text_primary" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etProxySecret"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Protocol Type"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <RadioGroup
+                android:id="@+id/rgCustomProxyType"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textPassword"
-                android:textColor="@color/text_primary" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <RadioButton
+                    android:id="@+id/rbCustomSocks5"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SOCKS5"
+                    android:textColor="@color/text_primary"
+                    android:checked="true"
+                    android:layout_marginEnd="16dp" />
+
+                <RadioButton
+                    android:id="@+id/rbCustomMtproto"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="MTProto"
+                    android:textColor="@color/text_primary" />
+            </RadioGroup>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilProxyHost"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Host / IP Address"
+                android:layout_marginBottom="8dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etProxyHost"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textUri"
+                    android:textColor="@color/text_primary" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilProxyPort"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Port (e.g. 1080, 7437, 443)"
+                android:layout_marginBottom="8dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etProxyPort"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:textColor="@color/text_primary" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilProxyUsername"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Username (Optional)"
+                android:layout_marginBottom="8dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etProxyUsername"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text"
+                    android:textColor="@color/text_primary" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilProxySecret"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Password or MTProto Secret (Optional)"
+                android:layout_marginBottom="8dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etProxySecret"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textPassword"
+                    android:textColor="@color/text_primary" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <CheckBox
+                android:id="@+id/cbSaveToLibrary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Save to Proxy Library for all accounts"
+                android:textColor="@color/text_primary"
+                android:checked="true"
+                android:layout_marginBottom="8dp" />
+        </LinearLayout>
 
         <!-- Test Connection Row -->
         <LinearLayout
+            android:id="@+id/layoutTestPingRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
+            android:visibility="gone"
             android:layout_marginTop="4dp"
             android:layout_marginBottom="4dp">
 
@@ -149,15 +264,14 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/tvSecurityNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Encrypted in hardware Keystore. Independent per account. Localhost (127.0.0.1) is blocked."
+            android:textColor="@color/text_muted"
+            android:textSize="11sp"
+            android:layout_marginTop="8dp" />
+
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/tvSecurityNote"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Encrypted in hardware Keystore. Independent per account. Localhost (127.0.0.1) is blocked."
-        android:textColor="@color/text_muted"
-        android:textSize="11sp"
-        android:layout_marginTop="8dp" />
-
-</LinearLayout>
+</ScrollView>

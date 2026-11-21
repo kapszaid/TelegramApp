@@ -180,6 +180,97 @@ public class ProxyController {
         }
     }
 
+    public static class SavedProxy {
+        public String id;
+        public String name;
+        public ProxyType type;
+        public String host;
+        public int port;
+        public String username;
+        public long createdAt;
+
+        public SavedProxy() {}
+
+        public SavedProxy(String id, String name, ProxyType type, String host, int port, String username) {
+            this.id = id;
+            this.name = name;
+            this.type = type;
+            this.host = host;
+            this.port = port;
+            this.username = username;
+            this.createdAt = System.currentTimeMillis();
+        }
+
+        @Override
+        public String toString() {
+            return name != null && !name.isEmpty() ? name : (type + " - " + host + ":" + port);
+        }
+    }
+
+    private static final String KEY_SAVED_PROXIES_LIST = "global_saved_proxies_list";
+
+    public synchronized java.util.List<SavedProxy> getAllSavedProxies() {
+        String json = prefs.getString(KEY_SAVED_PROXIES_LIST, null);
+        if (json != null) {
+            java.lang.reflect.Type listType = new com.google.gson.reflect.TypeToken<java.util.ArrayList<SavedProxy>>() {}.getType();
+            java.util.List<SavedProxy> loaded = gson.fromJson(json, listType);
+            if (loaded != null) return loaded;
+        }
+        return new java.util.ArrayList<>();
+    }
+
+    public synchronized SavedProxy getSavedProxy(String proxyId) {
+        if (proxyId == null) return null;
+        for (SavedProxy p : getAllSavedProxies()) {
+            if (p.id.equals(proxyId)) return p;
+        }
+        return null;
+    }
+
+    public synchronized String getSavedProxySecret(String proxyId) {
+        if (proxyId == null || sessionVault == null) return null;
+        return sessionVault.getSession("saved_proxy_sec_" + proxyId);
+    }
+
+    public synchronized SavedProxy saveToGlobalLibrary(String name, ProxyType type, String host, int port, String username, String secret) {
+        validate(host, port);
+        java.util.List<SavedProxy> list = getAllSavedProxies();
+        String id = "saved_proxy_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        String label = (name != null && !name.trim().isEmpty()) ? name.trim() : (type + " " + host + ":" + port);
+        SavedProxy item = new SavedProxy(id, label, type, host.trim(), port, username != null ? username.trim() : "");
+        list.add(item);
+        prefs.edit().putString(KEY_SAVED_PROXIES_LIST, gson.toJson(list)).apply();
+
+        if (sessionVault != null && secret != null && !secret.isEmpty()) {
+            sessionVault.saveSession("saved_proxy_sec_" + id, secret);
+        }
+        return item;
+    }
+
+    public synchronized void deleteSavedProxy(String proxyId) {
+        if (proxyId == null) return;
+        java.util.List<SavedProxy> list = getAllSavedProxies();
+        list.removeIf(p -> p.id.equals(proxyId));
+        prefs.edit().putString(KEY_SAVED_PROXIES_LIST, gson.toJson(list)).apply();
+        if (sessionVault != null) {
+            sessionVault.removeSession("saved_proxy_sec_" + proxyId);
+        }
+    }
+
+    public synchronized void applySavedProxyToAccount(String accountId, String proxyId) {
+        SavedProxy saved = getSavedProxy(proxyId);
+        if (saved == null) return;
+        String secret = getSavedProxySecret(proxyId);
+        ProxyMetadata meta = new ProxyMetadata();
+        meta.type = saved.type;
+        meta.host = saved.host;
+        meta.port = saved.port;
+        meta.username = saved.username;
+        meta.enabled = true;
+        meta.label = saved.name;
+        saveProxy(accountId, meta, secret);
+    }
+
     /**
      * Converts ProxyMetadata + decrypted secret to a native TDLib TdApi.Proxy object.
      * Returns null if metadata is null, disabled, or DIRECT.

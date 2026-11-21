@@ -1161,4 +1161,70 @@ public class TdLibIntegrationTest {
         assertTrue(manager.hasAccountWithPhone("919876543210"));
         assertFalse(manager.hasAccountWithPhone("+1234567890"));
     }
+
+    @Test
+    public void testGlobalSavedProxiesLibrary() {
+        MockSharedPreferences mockPrefs = new MockSharedPreferences();
+        SecureSessionVault testVault = new SecureSessionVault(mockPrefs, true);
+        com.nexgram.messenger.proxy.ProxyController proxy = new com.nexgram.messenger.proxy.ProxyController(mockPrefs, testVault);
+
+        // Add 1st proxy to global library (UK SOCKS5)
+        com.nexgram.messenger.proxy.ProxyController.SavedProxy saved1 = proxy.saveToGlobalLibrary(
+                "UK SOCKS5",
+                com.nexgram.messenger.proxy.ProxyController.ProxyType.SOCKS5,
+                "104.252.129.67",
+                7437,
+                "vvxvmuda",
+                "secret_pass_123"
+        );
+
+        assertNotNull(saved1);
+        assertNotNull(saved1.id);
+        assertEquals("UK SOCKS5", saved1.name);
+        assertEquals("104.252.129.67", saved1.host);
+        assertEquals(7437, saved1.port);
+
+        // Add 2nd proxy to global library (DE MTProto)
+        com.nexgram.messenger.proxy.ProxyController.SavedProxy saved2 = proxy.saveToGlobalLibrary(
+                "Germany MTProto",
+                com.nexgram.messenger.proxy.ProxyController.ProxyType.MTPROTO,
+                "142.250.190.46",
+                443,
+                "",
+                "ee112233445566778899aabbccddeeff"
+        );
+
+        List<com.nexgram.messenger.proxy.ProxyController.SavedProxy> allSaved = proxy.getAllSavedProxies();
+        assertEquals(2, allSaved.size());
+        assertEquals("secret_pass_123", proxy.getSavedProxySecret(saved1.id));
+        assertEquals("ee112233445566778899aabbccddeeff", proxy.getSavedProxySecret(saved2.id));
+
+        // Apply saved1 to account_alpha
+        proxy.applySavedProxyToAccount("account_alpha", saved1.id);
+        com.nexgram.messenger.proxy.ProxyController.ProxyMetadata alphaMeta = proxy.getProxyMetadata("account_alpha");
+        assertNotNull(alphaMeta);
+        assertTrue(alphaMeta.enabled);
+        assertEquals("104.252.129.67", alphaMeta.host);
+        assertEquals("secret_pass_123", proxy.getProxySecret("account_alpha"));
+
+        // Apply saved2 to account_beta
+        proxy.applySavedProxyToAccount("account_beta", saved2.id);
+        com.nexgram.messenger.proxy.ProxyController.ProxyMetadata betaMeta = proxy.getProxyMetadata("account_beta");
+        assertNotNull(betaMeta);
+        assertTrue(betaMeta.enabled);
+        assertEquals(com.nexgram.messenger.proxy.ProxyController.ProxyType.MTPROTO, betaMeta.type);
+        assertEquals("142.250.190.46", betaMeta.host);
+        assertEquals("ee112233445566778899aabbccddeeff", proxy.getProxySecret("account_beta"));
+
+        // Delete saved1 from library
+        proxy.deleteSavedProxy(saved1.id);
+        assertEquals(1, proxy.getAllSavedProxies().size());
+        assertNull(proxy.getSavedProxy(saved1.id));
+        assertNull(proxy.getSavedProxySecret(saved1.id));
+
+        // Account alpha configuration remains intact as its own isolated copy
+        com.nexgram.messenger.proxy.ProxyController.ProxyMetadata alphaStillActive = proxy.getProxyMetadata("account_alpha");
+        assertNotNull(alphaStillActive);
+        assertEquals("104.252.129.67", alphaStillActive.host);
+    }
 }

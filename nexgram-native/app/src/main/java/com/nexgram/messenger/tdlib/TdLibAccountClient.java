@@ -78,6 +78,7 @@ public class TdLibAccountClient {
     }
 
     private final java.util.concurrent.ConcurrentHashMap<Long, TdApi.Chat> knownChats = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile String lastAppliedProxyFingerprint = null;
 
     private void initializeClient() {
         Log.i(TAG, "Initializing TDLib client for account: " + accountId);
@@ -95,16 +96,43 @@ public class TdLibAccountClient {
                 TdApi.UpdateChatTitle uct = (TdApi.UpdateChatTitle) object;
                 TdApi.Chat chat = knownChats.get(uct.chatId);
                 if (chat != null) chat.title = uct.title;
+            } else if (object instanceof TdApi.UpdateChatPhoto) {
+                TdApi.UpdateChatPhoto ucp = (TdApi.UpdateChatPhoto) object;
+                TdApi.Chat chat = knownChats.get(ucp.chatId);
+                if (chat != null) chat.photo = ucp.photo;
+            } else if (object instanceof TdApi.UpdateChatLastMessage) {
+                TdApi.UpdateChatLastMessage uclm = (TdApi.UpdateChatLastMessage) object;
+                TdApi.Chat chat = knownChats.get(uclm.chatId);
+                if (chat != null) {
+                    chat.lastMessage = uclm.lastMessage;
+                    if (uclm.positions != null) {
+                        chat.positions = uclm.positions;
+                    }
+                }
             } else if (object instanceof TdApi.UpdateChatPosition) {
                 TdApi.UpdateChatPosition ucp = (TdApi.UpdateChatPosition) object;
                 TdApi.Chat chat = knownChats.get(ucp.chatId);
-                if (chat != null && chat.positions != null) {
-                    for (int i = 0; i < chat.positions.length; i++) {
-                        if (chat.positions[i].list.getConstructor() == ucp.position.list.getConstructor()) {
-                            chat.positions[i] = ucp.position;
-                            break;
-                        }
-                    }
+                if (chat != null) {
+                    updateChatPositionInternal(chat, ucp.position);
+                }
+            } else if (object instanceof TdApi.UpdateChatReadInbox) {
+                TdApi.UpdateChatReadInbox ucri = (TdApi.UpdateChatReadInbox) object;
+                TdApi.Chat chat = knownChats.get(ucri.chatId);
+                if (chat != null) {
+                    chat.lastReadInboxMessageId = ucri.lastReadInboxMessageId;
+                    chat.unreadCount = ucri.unreadCount;
+                }
+            } else if (object instanceof TdApi.UpdateChatReadOutbox) {
+                TdApi.UpdateChatReadOutbox ucro = (TdApi.UpdateChatReadOutbox) object;
+                TdApi.Chat chat = knownChats.get(ucro.chatId);
+                if (chat != null) {
+                    chat.lastReadOutboxMessageId = ucro.lastReadOutboxMessageId;
+                }
+            } else if (object instanceof TdApi.UpdateChatNotificationSettings) {
+                TdApi.UpdateChatNotificationSettings ucns = (TdApi.UpdateChatNotificationSettings) object;
+                TdApi.Chat chat = knownChats.get(ucns.chatId);
+                if (chat != null) {
+                    chat.notificationSettings = ucns.notificationSettings;
                 }
             }
             for (RawUpdateListener listener : rawUpdateListeners) {
@@ -148,6 +176,8 @@ public class TdLibAccountClient {
             Log.i(TAG, "Account " + accountId + ": Waiting for other device QR confirmation.");
         } else if (authState instanceof TdApi.AuthorizationStateReady) {
             Log.i(TAG, "Account " + accountId + ": Authorization complete. Client ready.");
+            send(new TdApi.SetOption("online", new TdApi.OptionValueBoolean(true)), null);
+            send(new TdApi.SetOption("ignore_background_updates", new TdApi.OptionValueBoolean(false)), null);
         } else if (authState instanceof TdApi.AuthorizationStateLoggingOut) {
             Log.i(TAG, "Account " + accountId + ": Client is logging out from Telegram servers.");
         } else if (authState instanceof TdApi.AuthorizationStateClosing) {
@@ -419,6 +449,30 @@ public class TdLibAccountClient {
         send(new TdApi.DeleteMessages(chatId, messageIds, revoke), handler);
     }
 
+    private void updateChatPositionInternal(TdApi.Chat chat, TdApi.ChatPosition newPos) {
+        if (chat == null || newPos == null) return;
+        if (chat.positions == null) {
+            chat.positions = new TdApi.ChatPosition[]{newPos};
+            return;
+        }
+        boolean replaced = false;
+        java.util.List<TdApi.ChatPosition> list = new java.util.ArrayList<>();
+        for (TdApi.ChatPosition pos : chat.positions) {
+            if (pos.list.getConstructor() == newPos.list.getConstructor()) {
+                if (newPos.order > 0) {
+                    list.add(newPos);
+                }
+                replaced = true;
+            } else {
+                list.add(pos);
+            }
+        }
+        if (!replaced && newPos.order > 0) {
+            list.add(newPos);
+        }
+        chat.positions = list.toArray(new TdApi.ChatPosition[0]);
+    }
+
     /**
      * Applies the configured proxy from ProxyController for this account, or disables proxy if none/disabled.
      */
@@ -430,9 +484,20 @@ public class TdLibAccountClient {
         com.nexgram.messenger.proxy.ProxyController.ProxyMetadata meta = proxyController.getProxyMetadata(accountId);
         if (meta != null && meta.enabled && meta.type != com.nexgram.messenger.proxy.ProxyController.ProxyType.DIRECT) {
             String secret = proxyController.getProxySecret(accountId);
+            String fingerprint = meta.type + ":" + meta.host + ":" + meta.port + ":" + (meta.username != null ? meta.username : "") + ":" + (secret != null ? secret : "");
+            if (fingerprint.equals(lastAppliedProxyFingerprint)) {
+                if (handler != null) handler.onResult(new TdApi.Ok());
+                return;
+            }
+            lastAppliedProxyFingerprint = fingerprint;
             TdApi.Proxy tdProxy = com.nexgram.messenger.proxy.ProxyController.buildTdApiProxy(meta, secret);
             setProxy(tdProxy, handler);
         } else {
+            if ("DIRECT".equals(lastAppliedProxyFingerprint)) {
+                if (handler != null) handler.onResult(new TdApi.Ok());
+                return;
+            }
+            lastAppliedProxyFingerprint = "DIRECT";
             disableProxy(handler);
         }
     }
@@ -496,6 +561,14 @@ public class TdLibAccountClient {
      */
     public java.util.List<TdApi.Chat> getKnownChats() {
         return new java.util.ArrayList<>(knownChats.values());
+    }
+
+    public TdApi.Chat getKnownChat(long chatId) {
+        return knownChats.get(chatId);
+    }
+
+    public void setOnline(boolean online) {
+        send(new TdApi.SetOption("online", new TdApi.OptionValueBoolean(online)), null);
     }
 
     /**
