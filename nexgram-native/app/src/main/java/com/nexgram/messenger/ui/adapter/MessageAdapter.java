@@ -15,19 +15,25 @@ import com.nexgram.messenger.ui.helpers.TelegramMessageFormatter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import org.drinkless.tdlib.TdApi;
 
 /**
  * Modern Telegram Message Adapter
- * Renders authentic Telegram conversation bubbles matching the official Telegram Android app:
- * - Incoming bubble (#182533) left-aligned with sender name and timestamp
- * - Outgoing bubble (#2B5278) right-aligned with timestamp and read/sent checkmarks
- * - Seamless transition from pending (clock icon) to sent (single check) / read (double check)
- * - Strict deduplication preventing duplicate message bubbles
+ *
+ * Implements official Telegram conversation list with pagination, real-time updates,
+ * editing, deletion, read status, and strict deduplication:
+ * - Chronological message list (oldest at top, newest at bottom)
+ * - Automatic date header pill insertion on calendar day boundaries
+ * - Infinite upward scroll pagination support via prependOlderMessages
+ * - Dynamic status tick updates (pending clock -> single check -> double check)
+ * - Message content update (edited messages) and deletion handling
  */
 public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
@@ -79,6 +85,9 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         safeNotifyDataSetChanged();
     }
 
+    /**
+     * Initializes adapter with the initial batch of messages (e.g. latest 50).
+     */
     public synchronized void setMessages(List<TdApi.Message> rawMessages) {
         items.clear();
         if (rawMessages == null || rawMessages.isEmpty()) {
@@ -86,39 +95,66 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             return;
         }
 
-        List<TdApi.Message> chronological = new ArrayList<>(rawMessages);
-        if (chronological.size() > 1 && chronological.get(0).date > chronological.get(chronological.size() - 1).date) {
-            java.util.Collections.reverse(chronological);
-        }
-
-        // Deduplicate messages by their unique 64-bit TDLib ID
         LinkedHashMap<Long, TdApi.Message> uniqueMessages = new LinkedHashMap<>();
-        for (TdApi.Message msg : chronological) {
+        for (TdApi.Message msg : rawMessages) {
             if (msg != null) {
                 uniqueMessages.put(msg.id, msg);
             }
         }
 
-        int lastDayOfYear = -1;
-        int lastYear = -1;
-
-        for (TdApi.Message msg : uniqueMessages.values()) {
-            if (msg.date > 0) {
-                Calendar cal = Calendar.getInstance();
-                cal.setTimeInMillis(msg.date * 1000L);
-                int dayOfYear = cal.get(Calendar.DAY_OF_YEAR);
-                int year = cal.get(Calendar.YEAR);
-
-                if (dayOfYear != lastDayOfYear || year != lastYear) {
-                    items.add(new DateHeaderItem(formatDateHeader(msg.date * 1000L)));
-                    lastDayOfYear = dayOfYear;
-                    lastYear = year;
-                }
+        List<TdApi.Message> sorted = new ArrayList<>(uniqueMessages.values());
+        Collections.sort(sorted, (m1, m2) -> {
+            if (m1.date != m2.date) {
+                return Integer.compare(m1.date, m2.date);
             }
-            items.add(new MessageItem(msg));
+            return Long.compare(m1.id, m2.id);
+        });
+
+        rebuildItems(sorted);
+        safeNotifyDataSetChanged();
+    }
+
+    /**
+     * Prepends older historical messages retrieved via pagination.
+     * Merges with existing messages, maintains strict chronological order,
+     * and returns the net number of items added before the previous top item.
+     */
+    public synchronized int prependOlderMessages(List<TdApi.Message> olderMessages) {
+        if (olderMessages == null || olderMessages.isEmpty()) {
+            return 0;
         }
 
+        LinkedHashMap<Long, TdApi.Message> allMap = new LinkedHashMap<>();
+
+        // Add older messages
+        for (TdApi.Message m : olderMessages) {
+            if (m != null) {
+                allMap.put(m.id, m);
+            }
+        }
+
+        // Add existing messages
+        for (Item it : items) {
+            if (it instanceof MessageItem) {
+                MessageItem mi = (MessageItem) it;
+                allMap.put(mi.message.id, mi.message);
+            }
+        }
+
+        int previousCount = items.size();
+
+        List<TdApi.Message> sortedAll = new ArrayList<>(allMap.values());
+        Collections.sort(sortedAll, (m1, m2) -> {
+            if (m1.date != m2.date) {
+                return Integer.compare(m1.date, m2.date);
+            }
+            return Long.compare(m1.id, m2.id);
+        });
+
+        rebuildItems(sortedAll);
         safeNotifyDataSetChanged();
+
+        return Math.max(0, items.size() - previousCount);
     }
 
     public synchronized void appendMessage(TdApi.Message msg) {
@@ -185,7 +221,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 }
             }
         }
-        // If not found (e.g. sent before activity opened), append cleanly
+        // If not found, append cleanly
         appendOrUpdateMessage(newMessage);
     }
 
@@ -204,6 +240,145 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     return;
                 }
             }
+        }
+    }
+
+    /**
+     * Handles TDLib UpdateMessageContent (e.g. message text edited).
+     */
+    public synchronized void onMessageContentUpdated(long messageId, TdApi.MessageContent newContent) {
+        if (newContent == null) return;
+        for (int i = 0; i < items.size(); i++) {
+            Item it = items.get(i);
+            if (it instanceof MessageItem) {
+                MessageItem mi = (MessageItem) it;
+                if (mi.message.id == messageId) {
+                    mi.message.content = newContent;
+                    safeNotifyItemChanged(i);
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Handles TDLib UpdateMessageEdited (edit date updated).
+     */
+    public synchronized void onMessageEdited(long messageId, int editDate) {
+        for (int i = 0; i < items.size(); i++) {
+            Item it = items.get(i);
+            if (it instanceof MessageItem) {
+                MessageItem mi = (MessageItem) it;
+                if (mi.message.id == messageId) {
+                    mi.message.editDate = editDate;
+                    safeNotifyItemChanged(i);
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Handles TDLib UpdateDeleteMessages. Removes matching messages from the list
+     * and clears any empty date headers.
+     */
+    public synchronized void onMessagesDeleted(long[] messageIds) {
+        if (messageIds == null || messageIds.length == 0) return;
+
+        Set<Long> toDelete = new HashSet<>();
+        for (long id : messageIds) {
+            toDelete.add(id);
+        }
+
+        boolean changed = false;
+        List<TdApi.Message> remaining = new ArrayList<>();
+        for (Item it : items) {
+            if (it instanceof MessageItem) {
+                MessageItem mi = (MessageItem) it;
+                if (!toDelete.contains(mi.message.id)) {
+                    remaining.add(mi.message);
+                } else {
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed) {
+            setMessages(remaining);
+        }
+    }
+
+    /**
+     * Returns true if a message with the given TDLib 64-bit ID exists in the adapter.
+     */
+    public synchronized boolean containsMessage(long messageId) {
+        for (Item it : items) {
+            if (it instanceof MessageItem && ((MessageItem) it).message.id == messageId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns the ID of the oldest message in the adapter (first MessageItem), or 0 if none.
+     */
+    public synchronized long getOldestMessageId() {
+        for (Item it : items) {
+            if (it instanceof MessageItem) {
+                return ((MessageItem) it).message.id;
+            }
+        }
+        return 0L;
+    }
+
+    /**
+     * Returns the ID of the newest message in the adapter (last MessageItem), or 0 if none.
+     */
+    public synchronized long getNewestMessageId() {
+        for (int i = items.size() - 1; i >= 0; i--) {
+            Item it = items.get(i);
+            if (it instanceof MessageItem) {
+                return ((MessageItem) it).message.id;
+            }
+        }
+        return 0L;
+    }
+
+    /**
+     * Returns total count of message bubbles (excluding date headers).
+     */
+    public synchronized int getMessageCount() {
+        int count = 0;
+        for (Item it : items) {
+            if (it instanceof MessageItem) count++;
+        }
+        return count;
+    }
+
+    private void rebuildItems(List<TdApi.Message> sortedChronological) {
+        items.clear();
+        if (sortedChronological == null || sortedChronological.isEmpty()) {
+            return;
+        }
+
+        int lastDayOfYear = -1;
+        int lastYear = -1;
+
+        for (TdApi.Message msg : sortedChronological) {
+            if (msg.date > 0) {
+                Calendar cal = Calendar.getInstance();
+                cal.setTimeInMillis(msg.date * 1000L);
+                int dayOfYear = cal.get(Calendar.DAY_OF_YEAR);
+                int year = cal.get(Calendar.YEAR);
+
+                if (dayOfYear != lastDayOfYear || year != lastYear) {
+                    items.add(new DateHeaderItem(formatDateHeader(msg.date * 1000L)));
+                    lastDayOfYear = dayOfYear;
+                    lastYear = year;
+                }
+            }
+            items.add(new MessageItem(msg));
         }
     }
 

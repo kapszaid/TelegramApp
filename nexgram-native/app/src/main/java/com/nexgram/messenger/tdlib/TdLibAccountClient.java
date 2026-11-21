@@ -379,6 +379,20 @@ public class TdLibAccountClient {
     }
 
     /**
+     * Retrieves chat message history from TDLib.
+     */
+    public void getChatHistory(long chatId, long fromMessageId, int offset, int limit, boolean onlyLocal, Client.ResultHandler handler) {
+        send(new TdApi.GetChatHistory(chatId, fromMessageId, offset, limit, onlyLocal), handler);
+    }
+
+    /**
+     * Deletes messages from a chat.
+     */
+    public void deleteMessages(long chatId, long[] messageIds, boolean revoke, Client.ResultHandler handler) {
+        send(new TdApi.DeleteMessages(chatId, messageIds, revoke), handler);
+    }
+
+    /**
      * Applies the configured proxy from ProxyController for this account, or disables proxy if none/disabled.
      */
     public void applySavedProxy(com.nexgram.messenger.proxy.ProxyController proxyController, Client.ResultHandler handler) {

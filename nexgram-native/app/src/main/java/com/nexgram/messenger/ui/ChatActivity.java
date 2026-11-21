@@ -13,6 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.graphics.Insets;
@@ -29,24 +30,28 @@ import com.nexgram.messenger.tdlib.TdLibAccountClient;
 import com.nexgram.messenger.tdlib.TdLibManager;
 import com.nexgram.messenger.ui.adapter.MessageAdapter;
 import com.nexgram.messenger.ui.helpers.TelegramAvatarHelper;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import org.drinkless.tdlib.TdApi;
 
 /**
  * Modern Telegram Conversation Screen
  *
- * Implements official Telegram Android chat experience:
+ * Implements Milestone 2.6 — Real Message History & Infinite Scroll Pagination:
+ * - Real Telegram message history loading via TDLib GetChatHistory
+ * - Infinite upward scroll pagination with seamless scroll-offset preservation
+ * - Real-time updates: UpdateNewMessage, SendSucceeded, SendFailed, ContentEdited, MessageDeleted, ReadStatus
  * - Edge-to-edge window insets handling for system bars and soft keyboard (adjustResize)
  * - 40dp circular avatar with official 7-color palette and monogram initials / photo caching
  * - Dynamic chat title and subtitle (service notifications, online status, group member count)
- * - Real TDLib message history via GetChatHistory
- * - Live real-time incoming and outgoing updates via UpdateNewMessage and UpdateChatReadOutbox
  * - Message bubbles matching official Telegram colors (#182533 incoming, #2B5278 outgoing)
  * - Bottom input bar with emoji, paperclip attach, and dynamic voice-mic / blue send airplane button
  * - Zero fake mock data: 100% genuine TDLib MTProto engine
  */
 public class ChatActivity extends AppCompatActivity {
     private static final String TAG = "ChatActivity";
+    private static final int PAGE_LIMIT = 50;
 
     private long chatId;
     private String chatTitle;
@@ -62,6 +67,7 @@ public class ChatActivity extends AppCompatActivity {
 
     private RecyclerView recyclerViewMessages;
     private ProgressBar pbLoadingMessages;
+    private ProgressBar pbLoadingOlderMessages;
     private TextView tvEmptyMessages;
 
     private LinearLayout layoutBottomInput;
@@ -75,6 +81,10 @@ public class ChatActivity extends AppCompatActivity {
     private MessageAdapter messageAdapter;
     private LinearLayoutManager layoutManager;
     private TdLibAccountClient activeClient;
+
+    // Pagination state
+    private boolean isLoadingOlderHistory = false;
+    private boolean hasReachedBeginningOfHistory = false;
 
     private final TdLibAccountClient.RawUpdateListener rawUpdateListener = this::handleIncomingTdlibUpdate;
 
@@ -112,6 +122,7 @@ public class ChatActivity extends AppCompatActivity {
 
         recyclerViewMessages = findViewById(R.id.recyclerViewMessages);
         pbLoadingMessages = findViewById(R.id.pbLoadingMessages);
+        pbLoadingOlderMessages = findViewById(R.id.pbLoadingOlderMessages);
         tvEmptyMessages = findViewById(R.id.tvEmptyMessages);
 
         layoutBottomInput = findViewById(R.id.layoutBottomInput);
@@ -175,6 +186,21 @@ public class ChatActivity extends AppCompatActivity {
 
         messageAdapter = new MessageAdapter(this);
         recyclerViewMessages.setAdapter(messageAdapter);
+
+        // Infinite upward scroll pagination listener
+        recyclerViewMessages.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                // When scrolling upward towards top and near the first items, trigger pagination
+                if (!isLoadingOlderHistory && !hasReachedBeginningOfHistory) {
+                    int firstVisible = layoutManager.findFirstVisibleItemPosition();
+                    if (firstVisible <= 5 && firstVisible != RecyclerView.NO_POSITION) {
+                        loadOlderChatHistory();
+                    }
+                }
+            }
+        });
     }
 
     private void setupInputBar() {
@@ -246,10 +272,16 @@ public class ChatActivity extends AppCompatActivity {
             }
         });
 
-        // Request chat history
+        // Request initial chat history (latest 50 messages)
         pbLoadingMessages.setVisibility(View.VISIBLE);
-        activeClient.send(new TdApi.GetChatHistory(chatId, 0, 0, 50, false), result -> {
+        final long requestChatId = chatId;
+
+        activeClient.getChatHistory(requestChatId, 0, 0, PAGE_LIMIT, false, result -> {
             runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed() || chatId != requestChatId) {
+                    return;
+                }
+
                 pbLoadingMessages.setVisibility(View.GONE);
                 if (result instanceof TdApi.Messages) {
                     TdApi.Messages msgs = (TdApi.Messages) result;
@@ -258,6 +290,11 @@ public class ChatActivity extends AppCompatActivity {
                         recyclerViewMessages.scrollToPosition(messageAdapter.getItemCount() - 1);
                         tvEmptyMessages.setVisibility(View.GONE);
 
+                        // If returned count is less than requested limit, beginning of history reached
+                        if (msgs.messages.length < PAGE_LIMIT) {
+                            hasReachedBeginningOfHistory = true;
+                        }
+
                         // Mark messages as read
                         long[] ids = new long[msgs.messages.length];
                         for (int i = 0; i < msgs.messages.length; i++) {
@@ -265,10 +302,76 @@ public class ChatActivity extends AppCompatActivity {
                         }
                         activeClient.send(new TdApi.ViewMessages(chatId, ids, null, true), null);
                     } else {
+                        hasReachedBeginningOfHistory = true;
                         tvEmptyMessages.setVisibility(View.VISIBLE);
                     }
                 } else {
                     tvEmptyMessages.setVisibility(View.VISIBLE);
+                }
+            });
+        });
+    }
+
+    /**
+     * Loads older messages via TDLib GetChatHistory pagination.
+     * Preserves the user's visible scroll position without jumping.
+     */
+    private synchronized void loadOlderChatHistory() {
+        if (isLoadingOlderHistory || hasReachedBeginningOfHistory || activeClient == null) {
+            return;
+        }
+
+        long oldestId = messageAdapter.getOldestMessageId();
+        if (oldestId <= 0) {
+            return;
+        }
+
+        isLoadingOlderHistory = true;
+        pbLoadingOlderMessages.setVisibility(View.VISIBLE);
+
+        final long requestChatId = chatId;
+        activeClient.getChatHistory(requestChatId, oldestId, 0, PAGE_LIMIT, false, result -> {
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed() || chatId != requestChatId) {
+                    return;
+                }
+
+                pbLoadingOlderMessages.setVisibility(View.GONE);
+                isLoadingOlderHistory = false;
+
+                if (result instanceof TdApi.Messages) {
+                    TdApi.Messages msgs = (TdApi.Messages) result;
+                    if (msgs.messages != null && msgs.messages.length > 0) {
+                        List<TdApi.Message> genuinelyOlder = new ArrayList<>();
+                        for (TdApi.Message m : msgs.messages) {
+                            if (m != null && m.id != oldestId && !messageAdapter.containsMessage(m.id)) {
+                                genuinelyOlder.add(m);
+                            }
+                        }
+
+                        if (genuinelyOlder.isEmpty()) {
+                            hasReachedBeginningOfHistory = true;
+                        } else {
+                            // Record current top visible position & pixel offset to maintain exact scroll position
+                            int firstVisible = layoutManager.findFirstVisibleItemPosition();
+                            View topView = layoutManager.findViewByPosition(firstVisible);
+                            int topOffset = (topView != null) ? (topView.getTop() - recyclerViewMessages.getPaddingTop()) : 0;
+
+                            int insertedCount = messageAdapter.prependOlderMessages(genuinelyOlder);
+
+                            if (firstVisible != RecyclerView.NO_POSITION && insertedCount > 0) {
+                                layoutManager.scrollToPositionWithOffset(firstVisible + insertedCount, topOffset);
+                            }
+
+                            if (msgs.messages.length < PAGE_LIMIT) {
+                                hasReachedBeginningOfHistory = true;
+                            }
+                        }
+                    } else {
+                        hasReachedBeginningOfHistory = true;
+                    }
+                } else if (result instanceof TdApi.Error) {
+                    Log.e(TAG, "Error loading older history: " + ((TdApi.Error) result).message);
                 }
             });
         });
@@ -344,19 +447,19 @@ public class ChatActivity extends AppCompatActivity {
             TdApi.UpdateNewMessage updateMsg = (TdApi.UpdateNewMessage) update;
             if (updateMsg.message.chatId == chatId) {
                 runOnUiThread(() -> {
+                    boolean isNearBottom = layoutManager.findLastVisibleItemPosition() >= messageAdapter.getItemCount() - 3;
                     messageAdapter.appendOrUpdateMessage(updateMsg.message);
-                    recyclerViewMessages.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
+
+                    // Auto-scroll only if user is already near bottom or sending outgoing
+                    if (isNearBottom || updateMsg.message.isOutgoing) {
+                        recyclerViewMessages.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
+                    }
                     tvEmptyMessages.setVisibility(View.GONE);
 
                     if (!updateMsg.message.isOutgoing && activeClient != null) {
                         activeClient.send(new TdApi.ViewMessages(chatId, new long[]{updateMsg.message.id}, null, true), null);
                     }
                 });
-            }
-        } else if (update instanceof TdApi.UpdateChatReadOutbox) {
-            TdApi.UpdateChatReadOutbox readOutbox = (TdApi.UpdateChatReadOutbox) update;
-            if (readOutbox.chatId == chatId) {
-                runOnUiThread(() -> messageAdapter.setLastReadOutboxMessageId(readOutbox.lastReadOutboxMessageId));
             }
         } else if (update instanceof TdApi.UpdateMessageSendSucceeded) {
             TdApi.UpdateMessageSendSucceeded succ = (TdApi.UpdateMessageSendSucceeded) update;
@@ -371,6 +474,36 @@ public class ChatActivity extends AppCompatActivity {
                     String errMsg = fail.error != null ? fail.error.message : "Error";
                     Toast.makeText(this, "Send failed: " + errMsg, Toast.LENGTH_SHORT).show();
                 });
+            }
+        } else if (update instanceof TdApi.UpdateMessageContent) {
+            TdApi.UpdateMessageContent updateContent = (TdApi.UpdateMessageContent) update;
+            if (updateContent.chatId == chatId) {
+                runOnUiThread(() -> messageAdapter.onMessageContentUpdated(updateContent.messageId, updateContent.newContent));
+            }
+        } else if (update instanceof TdApi.UpdateMessageEdited) {
+            TdApi.UpdateMessageEdited updateEdited = (TdApi.UpdateMessageEdited) update;
+            if (updateEdited.chatId == chatId) {
+                runOnUiThread(() -> messageAdapter.onMessageEdited(updateEdited.messageId, updateEdited.editDate));
+            }
+        } else if (update instanceof TdApi.UpdateDeleteMessages) {
+            TdApi.UpdateDeleteMessages updateDel = (TdApi.UpdateDeleteMessages) update;
+            if (updateDel.chatId == chatId) {
+                runOnUiThread(() -> {
+                    messageAdapter.onMessagesDeleted(updateDel.messageIds);
+                    if (messageAdapter.getMessageCount() == 0) {
+                        tvEmptyMessages.setVisibility(View.VISIBLE);
+                    }
+                });
+            }
+        } else if (update instanceof TdApi.UpdateChatReadOutbox) {
+            TdApi.UpdateChatReadOutbox readOutbox = (TdApi.UpdateChatReadOutbox) update;
+            if (readOutbox.chatId == chatId) {
+                runOnUiThread(() -> messageAdapter.setLastReadOutboxMessageId(readOutbox.lastReadOutboxMessageId));
+            }
+        } else if (update instanceof TdApi.UpdateChatReadInbox) {
+            TdApi.UpdateChatReadInbox readInbox = (TdApi.UpdateChatReadInbox) update;
+            if (readInbox.chatId == chatId) {
+                // Read inbox position updated
             }
         } else if (update instanceof TdApi.UpdateFile) {
             TdApi.UpdateFile fileUpdate = (TdApi.UpdateFile) update;

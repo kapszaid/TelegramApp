@@ -112,6 +112,17 @@
             android:paddingBottom="8dp"
             android:scrollbars="vertical" />
 
+        <!-- Top Pagination Loading Indicator -->
+        <ProgressBar
+            android:id="@+id/pbLoadingOlderMessages"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="8dp"
+            android:indeterminateTint="@color/primary"
+            android:visibility="gone" />
+
         <ProgressBar
             android:id="@+id/pbLoadingMessages"
             android:layout_width="40dp"

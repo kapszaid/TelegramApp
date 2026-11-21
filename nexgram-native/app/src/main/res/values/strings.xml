@@ -30,7 +30,7 @@
     <string name="empty_state_title">No Account Connected</string>
     <string name="empty_state_desc">Log in with your Telegram account or manage proxies in Settings. TDLib 1.8.70 native engine is active and ready for authentication.</string>
     <string name="empty_state_logged_in_title">No Messages</string>
-    <string name="empty_state_logged_in_desc">No conversations yet. Real-time dialog synchronization will appear in the next milestone.</string>
+    <string name="empty_state_logged_in_desc">No conversations yet. Your Telegram chats will sync and appear here automatically.</string>
     <string name="btn_login_telegram">Log In with Telegram</string>
 
     <!-- Authentication Flow -->

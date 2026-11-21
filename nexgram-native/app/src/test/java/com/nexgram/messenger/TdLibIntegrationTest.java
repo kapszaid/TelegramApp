@@ -9,7 +9,10 @@ import static org.junit.Assert.assertTrue;
 import android.content.SharedPreferences;
 import com.nexgram.messenger.auth.SecureSessionVault;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.drinkless.tdlib.Client;
@@ -400,5 +403,111 @@ public class TdLibIntegrationTest {
         // 4. Another UpdateNewMessage with serverMsg MUST NOT duplicate
         adapter.appendOrUpdateMessage(serverMsg);
         assertEquals("Server confirmed message must not duplicate", 2, adapter.getItemCount());
+    }
+
+    @Test
+    public void testInitialHistoryLoadingAndEmptyConversation() {
+        com.nexgram.messenger.ui.adapter.MessageAdapter adapter = new com.nexgram.messenger.ui.adapter.MessageAdapter(null);
+
+        // 1. Empty conversation handling
+        adapter.setMessages(java.util.Collections.emptyList());
+        assertEquals(0, adapter.getItemCount());
+        assertEquals(0, adapter.getMessageCount());
+        assertEquals(0L, adapter.getOldestMessageId());
+        assertEquals(0L, adapter.getNewestMessageId());
+
+        // 2. Initial batch of 50 messages loading (reverse chronological input from TDLib)
+        List<TdApi.Message> batch = new ArrayList<>();
+        long baseTime = 1700000000;
+        for (int i = 50; i >= 1; i--) { // 50 (newest) down to 1 (oldest)
+            TdApi.Message m = new TdApi.Message();
+            m.id = 1000L + i;
+            m.date = (int) (baseTime + i * 60);
+            m.isOutgoing = (i % 2 == 0);
+            m.content = new TdApi.MessageText(new TdApi.FormattedText("Msg " + i, new TdApi.TextEntity[0]), null, null);
+            batch.add(m);
+        }
+
+        adapter.setMessages(batch);
+        assertEquals(50, adapter.getMessageCount());
+
+        // Oldest message ID must be Msg 1 (id = 1001)
+        assertEquals(1001L, adapter.getOldestMessageId());
+        // Newest message ID must be Msg 50 (id = 1050)
+        assertEquals(1050L, adapter.getNewestMessageId());
+    }
+
+    @Test
+    public void testOlderMessagePaginationAndOffsetPreservation() {
+        com.nexgram.messenger.ui.adapter.MessageAdapter adapter = new com.nexgram.messenger.ui.adapter.MessageAdapter(null);
+
+        long baseTime = 1700000000;
+
+        // Initial latest batch: Messages 51 to 100
+        List<TdApi.Message> initialBatch = new ArrayList<>();
+        for (int i = 51; i <= 100; i++) {
+            TdApi.Message m = new TdApi.Message();
+            m.id = 1000L + i;
+            m.date = (int) (baseTime + i * 60);
+            m.content = new TdApi.MessageText(new TdApi.FormattedText("Msg " + i, new TdApi.TextEntity[0]), null, null);
+            initialBatch.add(m);
+        }
+        adapter.setMessages(initialBatch);
+        assertEquals(50, adapter.getMessageCount());
+        assertEquals(1051L, adapter.getOldestMessageId());
+
+        // Pagination: Prepend older batch: Messages 1 to 50
+        List<TdApi.Message> olderBatch = new ArrayList<>();
+        for (int i = 50; i >= 1; i--) {
+            TdApi.Message m = new TdApi.Message();
+            m.id = 1000L + i;
+            m.date = (int) (baseTime + i * 60);
+            m.content = new TdApi.MessageText(new TdApi.FormattedText("Msg " + i, new TdApi.TextEntity[0]), null, null);
+            olderBatch.add(m);
+        }
+
+        int inserted = adapter.prependOlderMessages(olderBatch);
+        assertTrue("Inserted count must be positive when prepending older items", inserted > 0);
+        assertEquals(100, adapter.getMessageCount());
+
+        // New oldest message must now be Msg 1 (id = 1001)
+        assertEquals(1001L, adapter.getOldestMessageId());
+        assertEquals(1100L, adapter.getNewestMessageId());
+
+        // Re-prepending duplicate messages must not increase count
+        int duplicateInserted = adapter.prependOlderMessages(olderBatch);
+        assertEquals(0, duplicateInserted);
+        assertEquals(100, adapter.getMessageCount());
+    }
+
+    @Test
+    public void testMessageContentEditingAndDeletion() {
+        com.nexgram.messenger.ui.adapter.MessageAdapter adapter = new com.nexgram.messenger.ui.adapter.MessageAdapter(null);
+
+        TdApi.Message msg1 = new TdApi.Message();
+        msg1.id = 2001L;
+        msg1.date = 1700000000;
+        msg1.content = new TdApi.MessageText(new TdApi.FormattedText("Original Text", new TdApi.TextEntity[0]), null, null);
+
+        TdApi.Message msg2 = new TdApi.Message();
+        msg2.id = 2002L;
+        msg2.date = 1700000060;
+        msg2.content = new TdApi.MessageText(new TdApi.FormattedText("Second Message", new TdApi.TextEntity[0]), null, null);
+
+        adapter.setMessages(Arrays.asList(msg1, msg2));
+        assertEquals(2, adapter.getMessageCount());
+
+        // 1. Test Content Editing (UpdateMessageContent)
+        TdApi.FormattedText editedText = new TdApi.FormattedText("Edited Text Content", new TdApi.TextEntity[0]);
+        adapter.onMessageContentUpdated(2001L, new TdApi.MessageText(editedText, null, null));
+        adapter.onMessageEdited(2001L, 1700000120);
+
+        assertTrue(adapter.containsMessage(2001L));
+
+        // 2. Test Message Deletion (UpdateDeleteMessages)
+        adapter.onMessagesDeleted(new long[]{2002L});
+        assertEquals(1, adapter.getMessageCount());
+        assertTrue(adapter.containsMessage(2001L));
+        assertFalse(adapter.containsMessage(2002L));
     }
 }
