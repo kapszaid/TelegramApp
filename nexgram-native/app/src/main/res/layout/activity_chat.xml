@@ -352,6 +352,43 @@
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Emoji" />
 
+        <!-- Live Voice Recording UI -->
+        <LinearLayout
+            android:id="@+id/layoutVoiceRecording"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/ivRecordDot"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:src="@drawable/ic_record_dot"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/tvRecordDuration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0:00"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:id="@+id/tvSlideToCancel"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="&lt; Slide to cancel"
+                android:textColor="#7F91A4"
+                android:textSize="13sp" />
+        </LinearLayout>
+
         <EditText
             android:id="@+id/etMessageInput"
             android:layout_width="0dp"

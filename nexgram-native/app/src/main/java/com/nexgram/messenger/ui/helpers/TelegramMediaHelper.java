@@ -41,6 +41,47 @@ public class TelegramMediaHelper {
         }
     }
 
+    public static class AudioMetadata {
+        public final int duration;
+        public final String title;
+        public final String performer;
+
+        public AudioMetadata(int duration, String title, String performer) {
+            this.duration = duration;
+            this.title = title;
+            this.performer = performer;
+        }
+    }
+
+    public static AudioMetadata getAudioMetadata(String filePath) {
+        if (filePath == null) return new AudioMetadata(0, "Audio", "Unknown Artist");
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(filePath);
+            String durStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            String title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
+            String artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
+
+            int durationMs = durStr != null ? Integer.parseInt(durStr) : 0;
+            int durationSec = Math.max(1, durationMs / 1000);
+            if (title == null || title.trim().isEmpty()) {
+                File f = new File(filePath);
+                title = f.getName();
+            }
+            if (artist == null || artist.trim().isEmpty()) {
+                artist = "Unknown Artist";
+            }
+            return new AudioMetadata(durationSec, title, artist);
+        } catch (Exception e) {
+            File f = new File(filePath);
+            return new AudioMetadata(0, f.getName(), "Unknown Artist");
+        } finally {
+            try {
+                retriever.release();
+            } catch (Exception ignored) {}
+        }
+    }
+
     public static File copyUriToCache(Context context, Uri uri, String preferredName) {
         if (context == null || uri == null) return null;
 

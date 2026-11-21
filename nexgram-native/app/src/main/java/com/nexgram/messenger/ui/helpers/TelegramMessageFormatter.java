@@ -32,6 +32,17 @@ public class TelegramMessageFormatter {
         } else if (content instanceof TdApi.MessageVoiceNote) {
             return "🎤 Voice message";
         } else if (content instanceof TdApi.MessageAudio) {
+            TdApi.MessageAudio audioMsg = (TdApi.MessageAudio) content;
+            if (audioMsg.audio != null) {
+                if (audioMsg.audio.title != null && !audioMsg.audio.title.isEmpty()) {
+                    if (audioMsg.audio.performer != null && !audioMsg.audio.performer.isEmpty()) {
+                        return "🎵 " + audioMsg.audio.performer + " - " + audioMsg.audio.title;
+                    }
+                    return "🎵 " + audioMsg.audio.title;
+                } else if (audioMsg.audio.fileName != null && !audioMsg.audio.fileName.isEmpty()) {
+                    return "🎵 " + audioMsg.audio.fileName;
+                }
+            }
             return "🎵 Audio";
         } else if (content instanceof TdApi.MessageDocument) {
             TdApi.MessageDocument doc = (TdApi.MessageDocument) content;

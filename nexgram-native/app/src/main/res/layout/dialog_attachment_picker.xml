@@ -137,6 +137,40 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
+        <!-- Music / Audio Option -->
+        <LinearLayout
+            android:id="@+id/btnAttachAudio"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?android:attr/selectableItemBackground"
+            android:padding="8dp">
+
+            <FrameLayout
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_avatar"
+                app:tint="#FB8C00">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_attach_music"
+                    app:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Music"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+        </LinearLayout>
+
     </LinearLayout>
 
 </LinearLayout>

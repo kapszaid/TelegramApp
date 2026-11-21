@@ -871,4 +871,127 @@ public class TdLibIntegrationTest {
         mDoc.content = docWithCaption;
         assertEquals("📄 contract.pdf", com.nexgram.messenger.ui.helpers.TelegramMessageFormatter.formatMessagePreview(mDoc));
     }
+
+    @Test
+    public void testVoiceNoteRequestConstruction() {
+        String testVoicePath = "/data/user/0/com.nexgram.messenger/cache/voice_out/test.ogg";
+        int durationSec = 14;
+        byte[] waveform = new byte[100];
+        for (int i = 0; i < 100; i++) {
+            waveform[i] = (byte) (i % 32);
+        }
+
+        TdApi.InputFile voiceFile = new TdApi.InputFileLocal(testVoicePath);
+        TdApi.InputVoiceNote voiceNote = new TdApi.InputVoiceNote(voiceFile, durationSec, waveform);
+        assertEquals(TdApi.InputVoiceNote.CONSTRUCTOR, voiceNote.getConstructor());
+        assertEquals(durationSec, voiceNote.duration);
+        assertEquals(100, voiceNote.waveform.length);
+
+        TdApi.InputMessageVoiceNote content = new TdApi.InputMessageVoiceNote(voiceNote, null, null);
+        assertEquals(TdApi.InputMessageVoiceNote.CONSTRUCTOR, content.getConstructor());
+
+        TdApi.SendMessage sendRequest = new TdApi.SendMessage(12345L, null, null, null, null, content);
+        assertEquals(TdApi.SendMessage.CONSTRUCTOR, sendRequest.getConstructor());
+        assertTrue(sendRequest.inputMessageContent instanceof TdApi.InputMessageVoiceNote);
+    }
+
+    @Test
+    public void testAudioRequestConstruction() {
+        String testAudioPath = "/storage/emulated/0/Music/song.mp3";
+        int durationSec = 215;
+        String title = "Starboy";
+        String performer = "The Weeknd";
+
+        TdApi.InputFile audioFile = new TdApi.InputFileLocal(testAudioPath);
+        TdApi.InputAudio audio = new TdApi.InputAudio(audioFile, null, durationSec, title, performer);
+        assertEquals(TdApi.InputAudio.CONSTRUCTOR, audio.getConstructor());
+        assertEquals(title, audio.title);
+        assertEquals(performer, audio.performer);
+        assertEquals(durationSec, audio.duration);
+
+        TdApi.FormattedText caption = new TdApi.FormattedText("Best track", new TdApi.TextEntity[0]);
+        TdApi.InputMessageAudio content = new TdApi.InputMessageAudio(audio, caption);
+        assertEquals(TdApi.InputMessageAudio.CONSTRUCTOR, content.getConstructor());
+
+        TdApi.SendMessage sendRequest = new TdApi.SendMessage(54321L, null, null, null, null, content);
+        assertEquals(TdApi.SendMessage.CONSTRUCTOR, sendRequest.getConstructor());
+        assertTrue(sendRequest.inputMessageContent instanceof TdApi.InputMessageAudio);
+    }
+
+    @Test
+    public void testStickerRequestConstruction() {
+        int stickerFileId = 889900;
+        int width = 512;
+        int height = 512;
+        String emoji = "🔥";
+
+        TdApi.InputFile stickerFile = new TdApi.InputFileId(stickerFileId);
+        TdApi.InputSticker sticker = new TdApi.InputSticker(stickerFile, null, width, height);
+        assertEquals(TdApi.InputSticker.CONSTRUCTOR, sticker.getConstructor());
+        assertEquals(width, sticker.width);
+        assertEquals(height, sticker.height);
+
+        TdApi.InputMessageSticker content = new TdApi.InputMessageSticker(sticker, emoji);
+        assertEquals(TdApi.InputMessageSticker.CONSTRUCTOR, content.getConstructor());
+        assertEquals(emoji, content.emoji);
+
+        TdApi.SendMessage sendRequest = new TdApi.SendMessage(99999L, null, null, null, null, content);
+        assertEquals(TdApi.SendMessage.CONSTRUCTOR, sendRequest.getConstructor());
+        assertTrue(sendRequest.inputMessageContent instanceof TdApi.InputMessageSticker);
+    }
+
+    @Test
+    public void testAnimationRequestConstruction() {
+        String testGifPath = "/storage/emulated/0/Download/funny.mp4";
+        int width = 480;
+        int height = 360;
+        int duration = 4;
+
+        TdApi.InputFile animFile = new TdApi.InputFileLocal(testGifPath);
+        TdApi.InputAnimation anim = new TdApi.InputAnimation(animFile, null, new int[0], duration, width, height);
+        assertEquals(TdApi.InputAnimation.CONSTRUCTOR, anim.getConstructor());
+        assertEquals(width, anim.width);
+        assertEquals(height, anim.height);
+        assertEquals(duration, anim.duration);
+
+        TdApi.InputMessageAnimation content = new TdApi.InputMessageAnimation(anim, null, false, false);
+        assertEquals(TdApi.InputMessageAnimation.CONSTRUCTOR, content.getConstructor());
+
+        TdApi.SendMessage sendRequest = new TdApi.SendMessage(88888L, null, null, null, null, content);
+        assertEquals(TdApi.SendMessage.CONSTRUCTOR, sendRequest.getConstructor());
+        assertTrue(sendRequest.inputMessageContent instanceof TdApi.InputMessageAnimation);
+    }
+
+    @Test
+    public void testInstalledStickerSetsAndAnimationsConstructors() {
+        TdApi.GetInstalledStickerSets reqStickers = new TdApi.GetInstalledStickerSets(new TdApi.StickerTypeRegular());
+        assertEquals(TdApi.GetInstalledStickerSets.CONSTRUCTOR, reqStickers.getConstructor());
+
+        TdApi.GetStickerSet reqSet = new TdApi.GetStickerSet(123456789L);
+        assertEquals(TdApi.GetStickerSet.CONSTRUCTOR, reqSet.getConstructor());
+        assertEquals(123456789L, reqSet.setId);
+
+        TdApi.GetSavedAnimations reqGifs = new TdApi.GetSavedAnimations();
+        assertEquals(TdApi.GetSavedAnimations.CONSTRUCTOR, reqGifs.getConstructor());
+    }
+
+    @Test
+    public void testMessageAdapterSenderNameCacheResolution() {
+        com.nexgram.messenger.ui.adapter.MessageAdapter adapter = new com.nexgram.messenger.ui.adapter.MessageAdapter(null);
+
+        // Pre-populate sender name
+        adapter.setSenderName(6115535877L, "Rakib Hasan");
+
+        TdApi.Message m = new TdApi.Message();
+        m.id = 1001L;
+        m.chatId = -100123456789L;
+        m.senderId = new TdApi.MessageSenderUser(6115535877L);
+        m.isOutgoing = false;
+        m.date = 1700000000;
+        m.content = new TdApi.MessageText(new TdApi.FormattedText("Hello Group", new TdApi.TextEntity[0]), null, null);
+
+        adapter.setMessages(Collections.singletonList(m));
+        assertEquals(1, adapter.getMessageCount());
+        assertTrue(adapter.containsMessage(1001L));
+    }
 }

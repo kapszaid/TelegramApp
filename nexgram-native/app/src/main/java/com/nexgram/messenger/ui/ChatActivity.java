@@ -37,6 +37,12 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.view.MotionEvent;
+import androidx.core.content.ContextCompat;
+import com.nexgram.messenger.ui.helpers.TelegramAudioPlayer;
+import com.nexgram.messenger.ui.helpers.TelegramVoiceRecorder;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.nexgram.messenger.NexGramApplication;
 import com.nexgram.messenger.R;
@@ -125,6 +131,14 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
     private ImageView ivSendBgCircle;
     private ImageView ivSendOrMicIcon;
 
+    // Live Voice Recording Views
+    private LinearLayout layoutVoiceRecording;
+    private ImageView ivRecordDot;
+    private TextView tvRecordDuration;
+    private TextView tvSlideToCancel;
+    private float voiceTouchStartX = 0f;
+    private boolean isVoiceRecordingCancelled = false;
+
     private MessageAdapter messageAdapter;
     private LinearLayoutManager layoutManager;
     private TdLibAccountClient activeClient;
@@ -138,7 +152,18 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
     private TdApi.Message editingMessage = null;
     private TdApi.Message currentPinnedMessage = null;
 
-    // Media attachment pickers
+    // Permissions & Media Pickers
+    private final ActivityResultLauncher<String> recordAudioPermissionLauncher = registerForActivityResult(
+        new ActivityResultContracts.RequestPermission(),
+        isGranted -> {
+            if (isGranted) {
+                Toast.makeText(this, "Microphone permission granted. Press and hold to record.", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "Microphone permission is required to record voice messages", Toast.LENGTH_SHORT).show();
+            }
+        }
+    );
+
     private final ActivityResultLauncher<String> pickPhotoLauncher = registerForActivityResult(
         new ActivityResultContracts.GetContent(),
         uri -> {
@@ -153,6 +178,15 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
         uri -> {
             if (uri != null) {
                 handleSelectedMediaUri(uri, "video");
+            }
+        }
+    );
+
+    private final ActivityResultLauncher<String> pickAudioLauncher = registerForActivityResult(
+        new ActivityResultContracts.GetContent(),
+        uri -> {
+            if (uri != null) {
+                handleSelectedMediaUri(uri, "audio");
             }
         }
     );
@@ -233,6 +267,11 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
         btnSendOrMic = findViewById(R.id.btnSendOrMic);
         ivSendBgCircle = findViewById(R.id.ivSendBgCircle);
         ivSendOrMicIcon = findViewById(R.id.ivSendOrMicIcon);
+
+        layoutVoiceRecording = findViewById(R.id.layoutVoiceRecording);
+        ivRecordDot = findViewById(R.id.ivRecordDot);
+        tvRecordDuration = findViewById(R.id.tvRecordDuration);
+        tvSlideToCancel = findViewById(R.id.tvSlideToCancel);
 
         btnBack.setOnClickListener(v -> onBackPressed());
     }
@@ -335,7 +374,7 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
                 super.onScrolled(recyclerView, dx, dy);
                 if (!isLoadingOlderHistory && !hasReachedBeginningOfHistory) {
                     int firstVisible = layoutManager.findFirstVisibleItemPosition();
-                    if (firstVisible <= 5 && firstVisible != RecyclerView.NO_POSITION) {
+                    if (firstVisible <= 10 && firstVisible != RecyclerView.NO_POSITION) {
                         loadOlderChatHistory();
                     }
                 }
@@ -344,9 +383,7 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
     }
 
     private void setupInputBar() {
-        btnEmoji.setOnClickListener(v ->
-            Toast.makeText(this, "Stickers and emojis", Toast.LENGTH_SHORT).show()
-        );
+        btnEmoji.setOnClickListener(v -> showStickerGifPicker());
 
         btnAttach.setOnClickListener(v -> showAttachmentPicker());
 
@@ -376,6 +413,50 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
             public void afterTextChanged(Editable s) {}
         });
 
+        // Touch listener for press-and-hold voice message recording with slide-to-cancel
+        btnSendOrMic.setOnTouchListener((v, event) -> {
+            String text = etMessageInput.getText().toString().trim();
+            if (!text.isEmpty() || editingMessage != null) {
+                return false;
+            }
+
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    voiceTouchStartX = event.getRawX();
+                    isVoiceRecordingCancelled = false;
+                    checkAndStartVoiceRecording();
+                    return true;
+
+                case MotionEvent.ACTION_MOVE:
+                    if (TelegramVoiceRecorder.getInstance().isRecording()) {
+                        float diffX = voiceTouchStartX - event.getRawX();
+                        float threshold = 80 * getResources().getDisplayMetrics().density;
+                        if (diffX > threshold) {
+                            if (!isVoiceRecordingCancelled) {
+                                isVoiceRecordingCancelled = true;
+                                tvSlideToCancel.setText("Release to cancel");
+                                tvSlideToCancel.setTextColor(0xFFE53935);
+                            }
+                        } else {
+                            if (isVoiceRecordingCancelled) {
+                                isVoiceRecordingCancelled = false;
+                                tvSlideToCancel.setText("< Slide to cancel");
+                                tvSlideToCancel.setTextColor(0xFF7F91A4);
+                            }
+                        }
+                    }
+                    return true;
+
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (TelegramVoiceRecorder.getInstance().isRecording()) {
+                        stopOrCancelVoiceRecording(isVoiceRecordingCancelled);
+                    }
+                    return true;
+            }
+            return false;
+        });
+
         btnSendOrMic.setOnClickListener(v -> {
             String text = etMessageInput.getText().toString().trim();
             if (editingMessage != null) {
@@ -383,13 +464,89 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
                 return;
             }
 
-            if (text.isEmpty()) {
-                Toast.makeText(this, "Hold to record voice message", Toast.LENGTH_SHORT).show();
-                return;
+            if (!text.isEmpty()) {
+                sendMessageToTelegram(text);
+            }
+        });
+    }
+
+    private void checkAndStartVoiceRecording() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
+            return;
+        }
+
+        layoutVoiceRecording.setVisibility(View.VISIBLE);
+        etMessageInput.setVisibility(View.GONE);
+        btnEmoji.setVisibility(View.GONE);
+        btnAttach.setVisibility(View.GONE);
+        ivSendBgCircle.setVisibility(View.VISIBLE);
+        ivSendOrMicIcon.setImageResource(R.drawable.ic_mic);
+        ivSendOrMicIcon.setColorFilter(0xFFFFFFFF, PorterDuff.Mode.SRC_IN);
+        tvRecordDuration.setText("0:00");
+        tvSlideToCancel.setText("< Slide to cancel");
+        tvSlideToCancel.setTextColor(0xFF7F91A4);
+
+        TelegramVoiceRecorder.getInstance().startRecording(this, new TelegramVoiceRecorder.RecordCallback() {
+            @Override
+            public void onTimerTick(int durationSeconds) {
+                runOnUiThread(() -> tvRecordDuration.setText(TelegramMediaHelper.formatDuration(durationSeconds)));
             }
 
-            sendMessageToTelegram(text);
+            @Override
+            public void onRecordingFinished(File voiceFile, int durationSeconds, byte[] waveform) {
+                runOnUiThread(() -> {
+                    resetVoiceRecordingUi();
+                    if (durationSeconds < 1) {
+                        Toast.makeText(ChatActivity.this, "Hold to record, release to send", Toast.LENGTH_SHORT).show();
+                        if (voiceFile != null && voiceFile.exists()) voiceFile.delete();
+                        return;
+                    }
+
+                    if (activeClient != null && voiceFile != null && voiceFile.exists()) {
+                        long replyToId = (replyingToMessage != null) ? replyingToMessage.id : 0;
+                        cancelReplyMode();
+                        activeClient.sendVoiceNote(chatId, replyToId, voiceFile.getAbsolutePath(), durationSeconds, waveform, null, result -> {
+                            if (result instanceof TdApi.Error) {
+                                TdApi.Error err = (TdApi.Error) result;
+                                runOnUiThread(() -> Toast.makeText(ChatActivity.this, "Failed to send voice: " + err.message, Toast.LENGTH_SHORT).show());
+                            }
+                        });
+                    }
+                });
+            }
+
+            @Override
+            public void onRecordingError(String message) {
+                runOnUiThread(() -> {
+                    resetVoiceRecordingUi();
+                    Toast.makeText(ChatActivity.this, "Voice error: " + message, Toast.LENGTH_SHORT).show();
+                });
+            }
         });
+    }
+
+    private void stopOrCancelVoiceRecording(boolean cancel) {
+        if (cancel) {
+            TelegramVoiceRecorder.getInstance().cancelRecording();
+            resetVoiceRecordingUi();
+            Toast.makeText(this, "Recording cancelled", Toast.LENGTH_SHORT).show();
+        } else {
+            TelegramVoiceRecorder.getInstance().stopRecording();
+        }
+    }
+
+    private void resetVoiceRecordingUi() {
+        layoutVoiceRecording.setVisibility(View.GONE);
+        etMessageInput.setVisibility(View.VISIBLE);
+        btnEmoji.setVisibility(View.VISIBLE);
+        btnAttach.setVisibility(View.VISIBLE);
+        boolean hasText = etMessageInput.getText().toString().trim().length() > 0;
+        if (!hasText && editingMessage == null) {
+            ivSendBgCircle.setVisibility(View.GONE);
+            ivSendOrMicIcon.setImageResource(R.drawable.ic_mic);
+            ivSendOrMicIcon.setColorFilter(0xFF7F91A4, PorterDuff.Mode.SRC_IN);
+        }
     }
 
     private void connectTdLibAndLoadMessages() {
@@ -437,8 +594,11 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
                         recyclerViewMessages.scrollToPosition(messageAdapter.getItemCount() - 1);
                         tvEmptyMessages.setVisibility(View.GONE);
 
-                        if (msgs.messages.length < PAGE_LIMIT) {
-                            hasReachedBeginningOfHistory = true;
+                        hasReachedBeginningOfHistory = false;
+
+                        // If TDLib only returned a few local cached messages, prefetch older history from server
+                        if (msgs.messages.length < 20) {
+                            loadOlderChatHistory();
                         }
 
                         // Mark messages as read
@@ -505,10 +665,6 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
 
                             if (firstVisible != RecyclerView.NO_POSITION && insertedCount > 0) {
                                 layoutManager.scrollToPositionWithOffset(firstVisible + insertedCount, topOffset);
-                            }
-
-                            if (msgs.messages.length < PAGE_LIMIT) {
-                                hasReachedBeginningOfHistory = true;
                             }
                         }
                     } else {
@@ -647,6 +803,11 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
             pickVideoLauncher.launch("video/*");
         });
 
+        sheet.findViewById(R.id.btnAttachAudio).setOnClickListener(v -> {
+            dialog.dismiss();
+            pickAudioLauncher.launch("audio/*");
+        });
+
         sheet.findViewById(R.id.btnAttachFile).setOnClickListener(v -> {
             dialog.dismiss();
             pickDocumentLauncher.launch("*/*");
@@ -740,6 +901,14 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
                     runOnUiThread(() -> Toast.makeText(this, "Failed to send video: " + err.message, Toast.LENGTH_SHORT).show());
                 }
             });
+        } else if ("audio".equals(mediaType)) {
+            TelegramMediaHelper.AudioMetadata meta = TelegramMediaHelper.getAudioMetadata(filePath);
+            activeClient.sendAudio(chatId, replyToId, filePath, meta.duration, meta.title, meta.performer, caption, result -> {
+                if (result instanceof TdApi.Error) {
+                    TdApi.Error err = (TdApi.Error) result;
+                    runOnUiThread(() -> Toast.makeText(this, "Failed to send audio: " + err.message, Toast.LENGTH_SHORT).show());
+                }
+            });
         } else {
             activeClient.sendDocument(chatId, replyToId, filePath, caption, result -> {
                 if (result instanceof TdApi.Error) {
@@ -797,6 +966,38 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
     public void onDownloadClicked(TdApi.Message message, int fileId) {
         if (activeClient != null && fileId > 0) {
             activeClient.downloadFile(fileId, 1, null);
+        }
+    }
+
+    @Override
+    public void onRequestSenderName(TdApi.MessageSender sender) {
+        if (activeClient == null || sender == null) return;
+        if (sender instanceof TdApi.MessageSenderUser) {
+            long userId = ((TdApi.MessageSenderUser) sender).userId;
+            activeClient.getUser(userId, result -> {
+                if (result instanceof TdApi.User) {
+                    TdApi.User user = (TdApi.User) result;
+                    String name = user.firstName;
+                    if (user.lastName != null && !user.lastName.isEmpty()) {
+                        name = (name == null || name.isEmpty()) ? user.lastName : name + " " + user.lastName;
+                    }
+                    if (name == null || name.isEmpty()) {
+                        name = (user.usernames != null && user.usernames.activeUsernames != null && user.usernames.activeUsernames.length > 0)
+                                ? "@" + user.usernames.activeUsernames[0] : "User";
+                    }
+                    final String finalName = name;
+                    runOnUiThread(() -> messageAdapter.setSenderName(userId, finalName));
+                }
+            });
+        } else if (sender instanceof TdApi.MessageSenderChat) {
+            long senderChatId = ((TdApi.MessageSenderChat) sender).chatId;
+            activeClient.send(new TdApi.GetChat(senderChatId), result -> {
+                if (result instanceof TdApi.Chat) {
+                    TdApi.Chat chat = (TdApi.Chat) result;
+                    final String title = chat.title != null ? chat.title : "Chat";
+                    runOnUiThread(() -> messageAdapter.setSenderName(senderChatId, title));
+                }
+            });
         }
     }
 
@@ -1261,15 +1462,304 @@ public class ChatActivity extends AppCompatActivity implements MessageAdapter.On
                     loadAvatarPhoto(fileUpdate.file.local.path);
                 }
             });
+        } else if (update instanceof TdApi.UpdateUser) {
+            TdApi.UpdateUser userUpdate = (TdApi.UpdateUser) update;
+            if (userUpdate.user != null) {
+                String name = userUpdate.user.firstName;
+                if (userUpdate.user.lastName != null && !userUpdate.user.lastName.isEmpty()) {
+                    name = (name == null || name.isEmpty()) ? userUpdate.user.lastName : name + " " + userUpdate.user.lastName;
+                }
+                if (name != null && !name.isEmpty()) {
+                    final String finalName = name;
+                    runOnUiThread(() -> messageAdapter.setSenderName(userUpdate.user.id, finalName));
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        TelegramAudioPlayer.getInstance().stop();
+        if (TelegramVoiceRecorder.getInstance().isRecording()) {
+            TelegramVoiceRecorder.getInstance().cancelRecording();
+            resetVoiceRecordingUi();
         }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        TelegramAudioPlayer.getInstance().stop();
         if (activeClient != null) {
             activeClient.removeRawUpdateListener(rawUpdateListener);
             activeClient.send(new TdApi.CloseChat(chatId), null);
+        }
+    }
+
+    // ==========================================
+    // STICKER & GIF PICKER (Milestone 2.9)
+    // ==========================================
+
+    private void showStickerGifPicker() {
+        if (activeClient == null) return;
+        BottomSheetDialog dialog = new BottomSheetDialog(this);
+        View view = LayoutInflater.from(this).inflate(R.layout.dialog_sticker_gif_picker, null);
+        dialog.setContentView(view);
+
+        TextView tabStickers = view.findViewById(R.id.tabStickers);
+        TextView tabGifs = view.findViewById(R.id.tabGifs);
+        LinearLayout layoutStickersView = view.findViewById(R.id.layoutStickersView);
+        LinearLayout layoutGifsView = view.findViewById(R.id.layoutGifsView);
+        RecyclerView rvStickersGrid = view.findViewById(R.id.rvStickersGrid);
+        RecyclerView rvGifsGrid = view.findViewById(R.id.rvGifsGrid);
+        ProgressBar pbLoading = view.findViewById(R.id.pbStickerGifLoading);
+        TextView tvEmpty = view.findViewById(R.id.tvStickerGifEmpty);
+
+        rvStickersGrid.setLayoutManager(new androidx.recyclerview.widget.GridLayoutManager(this, 5));
+        rvGifsGrid.setLayoutManager(new androidx.recyclerview.widget.GridLayoutManager(this, 3));
+
+        tabStickers.setOnClickListener(v -> {
+            tabStickers.setTextColor(0xFFFFFFFF);
+            tabGifs.setTextColor(0xFF7F91A4);
+            layoutStickersView.setVisibility(View.VISIBLE);
+            layoutGifsView.setVisibility(View.GONE);
+        });
+
+        tabGifs.setOnClickListener(v -> {
+            tabGifs.setTextColor(0xFFFFFFFF);
+            tabStickers.setTextColor(0xFF7F91A4);
+            layoutStickersView.setVisibility(View.GONE);
+            layoutGifsView.setVisibility(View.VISIBLE);
+            loadSavedGifs(rvGifsGrid, pbLoading, tvEmpty, dialog);
+        });
+
+        loadInstalledStickers(rvStickersGrid, pbLoading, tvEmpty, dialog);
+
+        dialog.show();
+    }
+
+    private void loadInstalledStickers(RecyclerView rvStickersGrid, ProgressBar pbLoading, TextView tvEmpty, BottomSheetDialog dialog) {
+        pbLoading.setVisibility(View.VISIBLE);
+        tvEmpty.setVisibility(View.GONE);
+
+        activeClient.getInstalledStickerSets(result -> {
+            if (result instanceof TdApi.StickerSets) {
+                TdApi.StickerSets sets = (TdApi.StickerSets) result;
+                if (sets.sets != null && sets.sets.length > 0) {
+                    long firstSetId = sets.sets[0].id;
+                    activeClient.getStickerSet(firstSetId, setResult -> {
+                        runOnUiThread(() -> {
+                            pbLoading.setVisibility(View.GONE);
+                            if (setResult instanceof TdApi.StickerSet) {
+                                TdApi.StickerSet set = (TdApi.StickerSet) setResult;
+                                if (set.stickers != null && set.stickers.length > 0) {
+                                    StickerPickerAdapter adapter = new StickerPickerAdapter(set.stickers, sticker -> {
+                                        long replyToId = (replyingToMessage != null) ? replyingToMessage.id : 0;
+                                        cancelReplyMode();
+                                        activeClient.sendSticker(chatId, replyToId, sticker.sticker.id, sticker.width, sticker.height, sticker.emoji, sendRes -> {
+                                            if (sendRes instanceof TdApi.Error) {
+                                                runOnUiThread(() -> Toast.makeText(ChatActivity.this, "Failed to send sticker", Toast.LENGTH_SHORT).show());
+                                            }
+                                        });
+                                        dialog.dismiss();
+                                    });
+                                    rvStickersGrid.setAdapter(adapter);
+                                } else {
+                                    tvEmpty.setText("No stickers in pack");
+                                    tvEmpty.setVisibility(View.VISIBLE);
+                                }
+                            } else {
+                                tvEmpty.setText("Failed to load sticker pack");
+                                tvEmpty.setVisibility(View.VISIBLE);
+                            }
+                        });
+                    });
+                } else {
+                    runOnUiThread(() -> {
+                        pbLoading.setVisibility(View.GONE);
+                        tvEmpty.setText("No sticker packs installed");
+                        tvEmpty.setVisibility(View.VISIBLE);
+                    });
+                }
+            } else {
+                runOnUiThread(() -> {
+                    pbLoading.setVisibility(View.GONE);
+                    tvEmpty.setText("Failed to load stickers");
+                    tvEmpty.setVisibility(View.VISIBLE);
+                });
+            }
+        });
+    }
+
+    private void loadSavedGifs(RecyclerView rvGifsGrid, ProgressBar pbLoading, TextView tvEmpty, BottomSheetDialog dialog) {
+        pbLoading.setVisibility(View.VISIBLE);
+        tvEmpty.setVisibility(View.GONE);
+
+        activeClient.getSavedAnimations(result -> {
+            runOnUiThread(() -> {
+                pbLoading.setVisibility(View.GONE);
+                if (result instanceof TdApi.Animations) {
+                    TdApi.Animations anims = (TdApi.Animations) result;
+                    if (anims.animations != null && anims.animations.length > 0) {
+                        GifPickerAdapter adapter = new GifPickerAdapter(anims.animations, anim -> {
+                            long replyToId = (replyingToMessage != null) ? replyingToMessage.id : 0;
+                            cancelReplyMode();
+                            if (anim.animation.local != null && anim.animation.local.isDownloadingCompleted &&
+                                anim.animation.local.path != null && !anim.animation.local.path.isEmpty()) {
+                                activeClient.sendAnimation(chatId, replyToId, anim.animation.local.path, anim.width, anim.height, anim.duration, null, sendRes -> {
+                                    if (sendRes instanceof TdApi.Error) {
+                                        runOnUiThread(() -> Toast.makeText(ChatActivity.this, "Failed to send GIF", Toast.LENGTH_SHORT).show());
+                                    }
+                                });
+                                dialog.dismiss();
+                            } else {
+                                Toast.makeText(ChatActivity.this, "Downloading GIF...", Toast.LENGTH_SHORT).show();
+                                activeClient.downloadFile(anim.animation.id, 1, dlRes -> {
+                                    if (dlRes instanceof TdApi.File) {
+                                        TdApi.File f = (TdApi.File) dlRes;
+                                        if (f.local.isDownloadingCompleted && f.local.path != null && !f.local.path.isEmpty()) {
+                                            activeClient.sendAnimation(chatId, replyToId, f.local.path, anim.width, anim.height, anim.duration, null, null);
+                                            runOnUiThread(dialog::dismiss);
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                        rvGifsGrid.setAdapter(adapter);
+                    } else {
+                        tvEmpty.setText("No saved GIFs found");
+                        tvEmpty.setVisibility(View.VISIBLE);
+                    }
+                } else {
+                    tvEmpty.setText("Failed to load GIFs");
+                    tvEmpty.setVisibility(View.VISIBLE);
+                }
+            });
+        });
+    }
+
+    private static class StickerPickerAdapter extends RecyclerView.Adapter<StickerPickerAdapter.ViewHolder> {
+        interface OnStickerClickListener {
+            void onStickerClick(TdApi.Sticker sticker);
+        }
+
+        private final TdApi.Sticker[] stickers;
+        private final OnStickerClickListener listener;
+
+        StickerPickerAdapter(TdApi.Sticker[] stickers, OnStickerClickListener listener) {
+            this.stickers = stickers;
+            this.listener = listener;
+        }
+
+        @NonNull
+        @Override
+        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_sticker_picker, parent, false);
+            return new ViewHolder(v);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+            TdApi.Sticker sticker = stickers[position];
+            if (sticker.thumbnail != null && sticker.thumbnail.file != null &&
+                sticker.thumbnail.file.local != null && sticker.thumbnail.file.local.isDownloadingCompleted &&
+                sticker.thumbnail.file.local.path != null && !sticker.thumbnail.file.local.path.isEmpty()) {
+                android.graphics.Bitmap bm = TelegramMediaHelper.decodeSampledBitmap(sticker.thumbnail.file.local.path, 120, 120);
+                if (bm != null) {
+                    holder.ivStickerThumb.setImageBitmap(bm);
+                } else {
+                    holder.ivStickerThumb.setImageResource(R.drawable.ic_sticker);
+                }
+            } else if (sticker.sticker != null && sticker.sticker.local != null &&
+                sticker.sticker.local.isDownloadingCompleted && sticker.sticker.local.path != null &&
+                !sticker.sticker.local.path.isEmpty()) {
+                android.graphics.Bitmap bm = TelegramMediaHelper.decodeSampledBitmap(sticker.sticker.local.path, 120, 120);
+                if (bm != null) {
+                    holder.ivStickerThumb.setImageBitmap(bm);
+                } else {
+                    holder.ivStickerThumb.setImageResource(R.drawable.ic_sticker);
+                }
+            } else {
+                holder.ivStickerThumb.setImageResource(R.drawable.ic_sticker);
+            }
+
+            holder.itemView.setOnClickListener(v -> listener.onStickerClick(sticker));
+        }
+
+        @Override
+        public int getItemCount() {
+            return stickers != null ? stickers.length : 0;
+        }
+
+        static class ViewHolder extends RecyclerView.ViewHolder {
+            final ImageView ivStickerThumb;
+            ViewHolder(@NonNull View itemView) {
+                super(itemView);
+                ivStickerThumb = itemView.findViewById(R.id.ivStickerThumb);
+            }
+        }
+    }
+
+    private static class GifPickerAdapter extends RecyclerView.Adapter<GifPickerAdapter.ViewHolder> {
+        interface OnGifClickListener {
+            void onGifClick(TdApi.Animation animation);
+        }
+
+        private final TdApi.Animation[] animations;
+        private final OnGifClickListener listener;
+
+        GifPickerAdapter(TdApi.Animation[] animations, OnGifClickListener listener) {
+            this.animations = animations;
+            this.listener = listener;
+        }
+
+        @NonNull
+        @Override
+        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_gif_picker, parent, false);
+            return new ViewHolder(v);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+            TdApi.Animation anim = animations[position];
+            if (anim.thumbnail != null && anim.thumbnail.file != null &&
+                anim.thumbnail.file.local != null && anim.thumbnail.file.local.isDownloadingCompleted &&
+                anim.thumbnail.file.local.path != null && !anim.thumbnail.file.local.path.isEmpty()) {
+                android.graphics.Bitmap bm = TelegramMediaHelper.decodeSampledBitmap(anim.thumbnail.file.local.path, 160, 120);
+                if (bm != null) {
+                    holder.ivGifThumb.setImageBitmap(bm);
+                } else {
+                    holder.ivGifThumb.setImageResource(R.drawable.ic_gif);
+                }
+            } else if (anim.animation != null && anim.animation.local != null &&
+                anim.animation.local.isDownloadingCompleted && anim.animation.local.path != null &&
+                !anim.animation.local.path.isEmpty()) {
+                android.graphics.Bitmap bm = TelegramMediaHelper.decodeSampledBitmap(anim.animation.local.path, 160, 120);
+                if (bm != null) {
+                    holder.ivGifThumb.setImageBitmap(bm);
+                } else {
+                    holder.ivGifThumb.setImageResource(R.drawable.ic_gif);
+                }
+            } else {
+                holder.ivGifThumb.setImageResource(R.drawable.ic_gif);
+            }
+
+            holder.itemView.setOnClickListener(v -> listener.onGifClick(anim));
+        }
+
+        @Override
+        public int getItemCount() {
+            return animations != null ? animations.length : 0;
+        }
+
+        static class ViewHolder extends RecyclerView.ViewHolder {
+            final ImageView ivGifThumb;
+            ViewHolder(@NonNull View itemView) {
+                super(itemView);
+                ivGifThumb = itemView.findViewById(R.id.ivGifThumb);
+            }
         }
     }
 

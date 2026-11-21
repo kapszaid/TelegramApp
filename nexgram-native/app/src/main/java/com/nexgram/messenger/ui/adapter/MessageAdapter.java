@@ -11,7 +11,9 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.nexgram.messenger.R;
+import com.nexgram.messenger.ui.helpers.TelegramAudioPlayer;
 import com.nexgram.messenger.ui.helpers.TelegramDateFormatter;
+import com.nexgram.messenger.ui.helpers.TelegramMediaHelper;
 import com.nexgram.messenger.ui.helpers.TelegramMessageFormatter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -75,16 +77,25 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         void onSelectionChanged(int selectedCount);
         void onMediaClicked(TdApi.Message message, TdApi.File file, String mimeType);
         void onDownloadClicked(TdApi.Message message, int fileId);
+        void onRequestSenderName(TdApi.MessageSender sender);
     }
 
     private final Context context;
     private final List<Item> items = new ArrayList<>();
     private final Set<Long> selectedMessageIds = new HashSet<>();
     private final java.util.concurrent.ConcurrentHashMap<Integer, TdApi.File> fileCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<Long, String> senderNameCache = new java.util.concurrent.ConcurrentHashMap<>();
     private boolean isSelectionMode = false;
     private OnMessageInteractionListener interactionListener;
     private long lastReadOutboxMessageId = 0;
     private boolean isGroupChat = false;
+
+    public void setSenderName(long senderId, String name) {
+        if (name != null && !name.trim().isEmpty()) {
+            senderNameCache.put(senderId, name.trim());
+            safeNotifyDataSetChanged();
+        }
+    }
 
     public MessageAdapter(Context context) {
         this.context = context;
@@ -590,10 +601,17 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
     private void bindOutgoing(OutgoingViewHolder holder, TdApi.Message message) {
-        bindMediaViews(holder.layoutMediaContainer, holder.ivMediaPhoto, holder.flVideoOverlay,
+        bindMessageContent(
+            holder.bubbleLayout, true,
+            holder.layoutMediaContainer, holder.ivMediaPhoto, holder.flVideoOverlay,
             holder.tvVideoDuration, holder.flMediaDownload, holder.pbMediaDownload,
-            holder.ivMediaDownloadIcon, holder.layoutDocumentContainer, holder.flDocAction,
-            holder.pbDocProgress, holder.ivDocIcon, holder.tvDocFileName, holder.tvDocFileSize,
+            holder.ivMediaDownloadIcon,
+            holder.layoutDocumentContainer, holder.flDocAction, holder.pbDocProgress,
+            holder.ivDocIcon, holder.tvDocFileName, holder.tvDocFileSize,
+            holder.layoutAudioContainer, holder.flAudioAction, holder.pbAudioLoading,
+            holder.ivAudioPlayPause, holder.tvAudioTitle, holder.pbAudioPlayback,
+            holder.tvAudioSubtitle,
+            holder.layoutStickerContainer, holder.ivSticker,
             holder.tvMessageText, message);
 
         holder.tvMessageTime.setText(formatTime(message.date));
@@ -642,10 +660,17 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
     private void bindIncoming(IncomingViewHolder holder, TdApi.Message message) {
-        bindMediaViews(holder.layoutMediaContainer, holder.ivMediaPhoto, holder.flVideoOverlay,
+        bindMessageContent(
+            holder.bubbleLayout, false,
+            holder.layoutMediaContainer, holder.ivMediaPhoto, holder.flVideoOverlay,
             holder.tvVideoDuration, holder.flMediaDownload, holder.pbMediaDownload,
-            holder.ivMediaDownloadIcon, holder.layoutDocumentContainer, holder.flDocAction,
-            holder.pbDocProgress, holder.ivDocIcon, holder.tvDocFileName, holder.tvDocFileSize,
+            holder.ivMediaDownloadIcon,
+            holder.layoutDocumentContainer, holder.flDocAction, holder.pbDocProgress,
+            holder.ivDocIcon, holder.tvDocFileName, holder.tvDocFileSize,
+            holder.layoutAudioContainer, holder.flAudioAction, holder.pbAudioLoading,
+            holder.ivAudioPlayPause, holder.tvAudioTitle, holder.pbAudioPlayback,
+            holder.tvAudioSubtitle,
+            holder.layoutStickerContainer, holder.ivSticker,
             holder.tvMessageText, message);
 
         holder.tvMessageTime.setText(formatTime(message.date));
@@ -685,155 +710,125 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
     }
 
-    private void bindMediaViews(View layoutMediaContainer, ImageView ivMediaPhoto, View flVideoOverlay,
-                                TextView tvVideoDuration, View flMediaDownload, ProgressBar pbMediaDownload,
-                                ImageView ivMediaDownloadIcon, View layoutDocumentContainer, View flDocAction,
-                                ProgressBar pbDocProgress, ImageView ivDocIcon, TextView tvDocFileName,
-                                TextView tvDocFileSize, TextView tvMessageText, TdApi.Message message) {
+    private void bindMessageContent(
+        View bubbleLayout, boolean isOutgoing,
+        View layoutMediaContainer, ImageView ivMediaPhoto, View flVideoOverlay,
+        TextView tvVideoDuration, View flMediaDownload, ProgressBar pbMediaDownload,
+        ImageView ivMediaDownloadIcon,
+        View layoutDocumentContainer, View flDocAction, ProgressBar pbDocProgress,
+        ImageView ivDocIcon, TextView tvDocFileName, TextView tvDocFileSize,
+        View layoutAudioContainer, View flAudioAction, ProgressBar pbAudioLoading,
+        ImageView ivAudioPlayPause, TextView tvAudioTitle, ProgressBar pbAudioPlayback,
+        TextView tvAudioSubtitle,
+        View layoutStickerContainer, ImageView ivSticker,
+        TextView tvMessageText, TdApi.Message message
+    ) {
         if (message == null || message.content == null) {
             layoutMediaContainer.setVisibility(View.GONE);
             layoutDocumentContainer.setVisibility(View.GONE);
+            layoutAudioContainer.setVisibility(View.GONE);
+            layoutStickerContainer.setVisibility(View.GONE);
             tvMessageText.setVisibility(View.VISIBLE);
             tvMessageText.setText("");
+            if (bubbleLayout != null) {
+                bubbleLayout.setBackgroundResource(isOutgoing ? R.drawable.bg_bubble_outgoing : R.drawable.bg_bubble_incoming);
+            }
             return;
         }
 
-        if (message.content instanceof TdApi.MessagePhoto) {
+        if (message.content instanceof TdApi.MessageSticker) {
+            if (bubbleLayout != null) bubbleLayout.setBackground(null);
+        } else {
+            if (bubbleLayout != null) {
+                bubbleLayout.setBackgroundResource(isOutgoing ? R.drawable.bg_bubble_outgoing : R.drawable.bg_bubble_incoming);
+            }
+        }
+
+        layoutMediaContainer.setVisibility(View.GONE);
+        layoutDocumentContainer.setVisibility(View.GONE);
+        layoutAudioContainer.setVisibility(View.GONE);
+        layoutStickerContainer.setVisibility(View.GONE);
+        tvMessageText.setVisibility(View.GONE);
+
+        if (message.content instanceof TdApi.MessageText) {
+            tvMessageText.setVisibility(View.VISIBLE);
+            TdApi.MessageText textMsg = (TdApi.MessageText) message.content;
+            tvMessageText.setText(textMsg.text != null ? textMsg.text.text : "");
+        } else if (message.content instanceof TdApi.MessagePhoto) {
             layoutMediaContainer.setVisibility(View.VISIBLE);
             flVideoOverlay.setVisibility(View.GONE);
-            layoutDocumentContainer.setVisibility(View.GONE);
-
             TdApi.Photo photo = ((TdApi.MessagePhoto) message.content).photo;
             TdApi.FormattedText caption = ((TdApi.MessagePhoto) message.content).caption;
-
             if (caption != null && caption.text != null && !caption.text.trim().isEmpty()) {
                 tvMessageText.setVisibility(View.VISIBLE);
                 tvMessageText.setText(caption.text);
-            } else {
-                tvMessageText.setVisibility(View.GONE);
             }
-
             if (photo != null && photo.sizes != null && photo.sizes.length > 0) {
                 TdApi.PhotoSize largest = photo.sizes[photo.sizes.length - 1];
                 TdApi.File file = getLatestFile(largest.photo);
-
-                if (file != null && file.local != null && file.local.isDownloadingCompleted &&
-                    file.local.path != null && !file.local.path.isEmpty()) {
-                    flMediaDownload.setVisibility(View.GONE);
-                    android.graphics.Bitmap bmp = com.nexgram.messenger.ui.helpers.TelegramMediaHelper.decodeSampledBitmap(file.local.path, 480, 480);
-                    if (bmp != null) {
-                        ivMediaPhoto.setImageBitmap(bmp);
-                    }
-                    layoutMediaContainer.setOnClickListener(v -> {
-                        if (isSelectionMode) {
-                            toggleSelection(message.id);
-                        } else if (interactionListener != null) {
-                            interactionListener.onMediaClicked(message, file, "image/jpeg");
-                        }
-                    });
-                } else {
-                    flMediaDownload.setVisibility(View.VISIBLE);
-                    ivMediaPhoto.setImageDrawable(null);
-                    boolean isDownloading = file != null && file.local != null && file.local.isDownloadingActive;
-                    pbMediaDownload.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
-                    ivMediaDownloadIcon.setVisibility(isDownloading ? View.GONE : View.VISIBLE);
-
-                    final int targetFileId = (file != null) ? file.id : 0;
-                    flMediaDownload.setOnClickListener(v -> {
-                        if (interactionListener != null && targetFileId > 0) {
-                            interactionListener.onDownloadClicked(message, targetFileId);
-                        }
-                    });
-                }
+                bindMediaPhotoOrVideo(layoutMediaContainer, ivMediaPhoto, flMediaDownload, pbMediaDownload, ivMediaDownloadIcon, message, file, "image/jpeg");
             }
         } else if (message.content instanceof TdApi.MessageVideo) {
             layoutMediaContainer.setVisibility(View.VISIBLE);
-            layoutDocumentContainer.setVisibility(View.GONE);
-
+            flVideoOverlay.setVisibility(View.VISIBLE);
             TdApi.Video video = ((TdApi.MessageVideo) message.content).video;
             TdApi.FormattedText caption = ((TdApi.MessageVideo) message.content).caption;
-
             if (caption != null && caption.text != null && !caption.text.trim().isEmpty()) {
                 tvMessageText.setVisibility(View.VISIBLE);
                 tvMessageText.setText(caption.text);
-            } else {
-                tvMessageText.setVisibility(View.GONE);
             }
-
             if (video != null) {
-                tvVideoDuration.setText(com.nexgram.messenger.ui.helpers.TelegramMediaHelper.formatDuration(video.duration));
-
-                // Load thumbnail if available
+                tvVideoDuration.setText(TelegramMediaHelper.formatDuration(video.duration));
                 if (video.thumbnail != null && video.thumbnail.file != null) {
                     TdApi.File thumbFile = getLatestFile(video.thumbnail.file);
-                    if (thumbFile != null && thumbFile.local != null && thumbFile.local.isDownloadingCompleted &&
-                        thumbFile.local.path != null && !thumbFile.local.path.isEmpty()) {
-                        android.graphics.Bitmap thumbBmp = com.nexgram.messenger.ui.helpers.TelegramMediaHelper.decodeSampledBitmap(thumbFile.local.path, 480, 480);
-                        if (thumbBmp != null) {
-                            ivMediaPhoto.setImageBitmap(thumbBmp);
-                        }
+                    if (thumbFile != null && thumbFile.local != null && thumbFile.local.isDownloadingCompleted && thumbFile.local.path != null) {
+                        android.graphics.Bitmap thumbBmp = TelegramMediaHelper.decodeSampledBitmap(thumbFile.local.path, 480, 480);
+                        if (thumbBmp != null) ivMediaPhoto.setImageBitmap(thumbBmp);
                     }
                 }
-
                 TdApi.File videoFile = getLatestFile(video.video);
-                if (videoFile != null && videoFile.local != null && videoFile.local.isDownloadingCompleted &&
-                    videoFile.local.path != null && !videoFile.local.path.isEmpty()) {
-                    flVideoOverlay.setVisibility(View.VISIBLE);
-                    flMediaDownload.setVisibility(View.GONE);
-
-                    layoutMediaContainer.setOnClickListener(v -> {
-                        if (isSelectionMode) {
-                            toggleSelection(message.id);
-                        } else if (interactionListener != null) {
-                            interactionListener.onMediaClicked(message, videoFile, video.mimeType);
-                        }
-                    });
-                } else {
-                    flVideoOverlay.setVisibility(View.GONE);
-                    flMediaDownload.setVisibility(View.VISIBLE);
-                    boolean isDownloading = videoFile != null && videoFile.local != null && videoFile.local.isDownloadingActive;
-                    pbMediaDownload.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
-                    ivMediaDownloadIcon.setVisibility(isDownloading ? View.GONE : View.VISIBLE);
-
-                    final int targetFileId = (videoFile != null) ? videoFile.id : 0;
-                    flMediaDownload.setOnClickListener(v -> {
-                        if (interactionListener != null && targetFileId > 0) {
-                            interactionListener.onDownloadClicked(message, targetFileId);
-                        }
-                    });
-                }
+                bindMediaPhotoOrVideo(layoutMediaContainer, ivMediaPhoto, flMediaDownload, pbMediaDownload, ivMediaDownloadIcon, message, videoFile, video.mimeType);
             }
-        } else if (message.content instanceof TdApi.MessageDocument) {
-            layoutMediaContainer.setVisibility(View.GONE);
-            layoutDocumentContainer.setVisibility(View.VISIBLE);
-
-            TdApi.Document doc = ((TdApi.MessageDocument) message.content).document;
-            TdApi.FormattedText caption = ((TdApi.MessageDocument) message.content).caption;
-
+        } else if (message.content instanceof TdApi.MessageAnimation) {
+            layoutMediaContainer.setVisibility(View.VISIBLE);
+            flVideoOverlay.setVisibility(View.VISIBLE);
+            tvVideoDuration.setText("GIF");
+            TdApi.Animation anim = ((TdApi.MessageAnimation) message.content).animation;
+            TdApi.FormattedText caption = ((TdApi.MessageAnimation) message.content).caption;
             if (caption != null && caption.text != null && !caption.text.trim().isEmpty()) {
                 tvMessageText.setVisibility(View.VISIBLE);
                 tvMessageText.setText(caption.text);
-            } else {
-                tvMessageText.setVisibility(View.GONE);
             }
-
+            if (anim != null) {
+                if (anim.thumbnail != null && anim.thumbnail.file != null) {
+                    TdApi.File thumbFile = getLatestFile(anim.thumbnail.file);
+                    if (thumbFile != null && thumbFile.local != null && thumbFile.local.isDownloadingCompleted && thumbFile.local.path != null) {
+                        android.graphics.Bitmap thumbBmp = TelegramMediaHelper.decodeSampledBitmap(thumbFile.local.path, 480, 480);
+                        if (thumbBmp != null) ivMediaPhoto.setImageBitmap(thumbBmp);
+                    }
+                }
+                TdApi.File animFile = getLatestFile(anim.animation);
+                bindMediaPhotoOrVideo(layoutMediaContainer, ivMediaPhoto, flMediaDownload, pbMediaDownload, ivMediaDownloadIcon, message, animFile, anim.mimeType != null ? anim.mimeType : "video/mp4");
+            }
+        } else if (message.content instanceof TdApi.MessageDocument) {
+            layoutDocumentContainer.setVisibility(View.VISIBLE);
+            TdApi.Document doc = ((TdApi.MessageDocument) message.content).document;
+            TdApi.FormattedText caption = ((TdApi.MessageDocument) message.content).caption;
+            if (caption != null && caption.text != null && !caption.text.trim().isEmpty()) {
+                tvMessageText.setVisibility(View.VISIBLE);
+                tvMessageText.setText(caption.text);
+            }
             if (doc != null) {
                 tvDocFileName.setText(doc.fileName != null ? doc.fileName : "Document");
                 TdApi.File docFile = getLatestFile(doc.document);
-
-                if (docFile != null && docFile.local != null && docFile.local.isDownloadingCompleted &&
-                    docFile.local.path != null && !docFile.local.path.isEmpty()) {
+                if (docFile != null && docFile.local != null && docFile.local.isDownloadingCompleted && docFile.local.path != null && !docFile.local.path.isEmpty()) {
                     pbDocProgress.setVisibility(View.GONE);
                     ivDocIcon.setVisibility(View.VISIBLE);
                     ivDocIcon.setImageResource(R.drawable.ic_document_file);
-                    tvDocFileSize.setText(com.nexgram.messenger.ui.helpers.TelegramMediaHelper.formatFileSize(docFile.size));
-
+                    tvDocFileSize.setText(TelegramMediaHelper.formatFileSize(docFile.size));
                     View.OnClickListener openListener = v -> {
-                        if (isSelectionMode) {
-                            toggleSelection(message.id);
-                        } else if (interactionListener != null) {
-                            interactionListener.onMediaClicked(message, docFile, doc.mimeType);
-                        }
+                        if (isSelectionMode) toggleSelection(message.id);
+                        else if (interactionListener != null) interactionListener.onMediaClicked(message, docFile, doc.mimeType);
                     };
                     layoutDocumentContainer.setOnClickListener(openListener);
                     flDocAction.setOnClickListener(openListener);
@@ -842,26 +837,180 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     pbDocProgress.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
                     ivDocIcon.setVisibility(isDownloading ? View.GONE : View.VISIBLE);
                     ivDocIcon.setImageResource(R.drawable.ic_download);
-
                     if (isDownloading && docFile != null && docFile.local != null) {
-                        tvDocFileSize.setText(com.nexgram.messenger.ui.helpers.TelegramMediaHelper.formatFileSize(docFile.local.downloadedSize) + " / " + com.nexgram.messenger.ui.helpers.TelegramMediaHelper.formatFileSize(docFile.size));
+                        tvDocFileSize.setText(TelegramMediaHelper.formatFileSize(docFile.local.downloadedSize) + " / " + TelegramMediaHelper.formatFileSize(docFile.size));
                     } else if (docFile != null) {
-                        tvDocFileSize.setText(com.nexgram.messenger.ui.helpers.TelegramMediaHelper.formatFileSize(docFile.size));
+                        tvDocFileSize.setText(TelegramMediaHelper.formatFileSize(docFile.size));
                     }
-
                     final int targetFileId = (docFile != null) ? docFile.id : 0;
                     flDocAction.setOnClickListener(v -> {
-                        if (interactionListener != null && targetFileId > 0) {
-                            interactionListener.onDownloadClicked(message, targetFileId);
-                        }
+                        if (interactionListener != null && targetFileId > 0) interactionListener.onDownloadClicked(message, targetFileId);
                     });
                 }
             }
+        } else if (message.content instanceof TdApi.MessageVoiceNote) {
+            layoutAudioContainer.setVisibility(View.VISIBLE);
+            TdApi.VoiceNote voice = ((TdApi.MessageVoiceNote) message.content).voiceNote;
+            TdApi.FormattedText caption = ((TdApi.MessageVoiceNote) message.content).caption;
+            if (caption != null && caption.text != null && !caption.text.trim().isEmpty()) {
+                tvMessageText.setVisibility(View.VISIBLE);
+                tvMessageText.setText(caption.text);
+            }
+            if (voice != null) {
+                tvAudioTitle.setText("Voice Message");
+                String durStr = TelegramMediaHelper.formatDuration(voice.duration);
+                tvAudioSubtitle.setText(durStr);
+                TdApi.File voiceFile = getLatestFile(voice.voice);
+                bindAudioPlayback(flAudioAction, pbAudioLoading, ivAudioPlayPause, pbAudioPlayback, tvAudioSubtitle, message, voiceFile, durStr);
+            }
+        } else if (message.content instanceof TdApi.MessageAudio) {
+            layoutAudioContainer.setVisibility(View.VISIBLE);
+            TdApi.Audio audio = ((TdApi.MessageAudio) message.content).audio;
+            TdApi.FormattedText caption = ((TdApi.MessageAudio) message.content).caption;
+            if (caption != null && caption.text != null && !caption.text.trim().isEmpty()) {
+                tvMessageText.setVisibility(View.VISIBLE);
+                tvMessageText.setText(caption.text);
+            }
+            if (audio != null) {
+                String title = (audio.title != null && !audio.title.isEmpty()) ? audio.title : (audio.fileName != null ? audio.fileName : "Audio");
+                String performer = (audio.performer != null && !audio.performer.isEmpty()) ? audio.performer + " • " : "";
+                String baseSub = performer + TelegramMediaHelper.formatDuration(audio.duration);
+                tvAudioTitle.setText(title);
+                tvAudioSubtitle.setText(baseSub);
+                TdApi.File audioFile = getLatestFile(audio.audio);
+                bindAudioPlayback(flAudioAction, pbAudioLoading, ivAudioPlayPause, pbAudioPlayback, tvAudioSubtitle, message, audioFile, baseSub);
+            }
+        } else if (message.content instanceof TdApi.MessageSticker) {
+            layoutStickerContainer.setVisibility(View.VISIBLE);
+            TdApi.Sticker sticker = ((TdApi.MessageSticker) message.content).sticker;
+            if (sticker != null && sticker.sticker != null) {
+                TdApi.File stickerFile = getLatestFile(sticker.sticker);
+                if (stickerFile != null && stickerFile.local != null && stickerFile.local.isDownloadingCompleted && stickerFile.local.path != null && !stickerFile.local.path.isEmpty()) {
+                    android.graphics.Bitmap bmp = TelegramMediaHelper.decodeSampledBitmap(stickerFile.local.path, 320, 320);
+                    if (bmp != null) {
+                        ivSticker.setImageBitmap(bmp);
+                    }
+                } else {
+                    if (sticker.thumbnail != null && sticker.thumbnail.file != null) {
+                        TdApi.File thumb = getLatestFile(sticker.thumbnail.file);
+                        if (thumb != null && thumb.local != null && thumb.local.isDownloadingCompleted && thumb.local.path != null) {
+                            android.graphics.Bitmap bmp = TelegramMediaHelper.decodeSampledBitmap(thumb.local.path, 200, 200);
+                            if (bmp != null) ivSticker.setImageBitmap(bmp);
+                        }
+                    }
+                    if (interactionListener != null && stickerFile != null && !stickerFile.local.isDownloadingActive) {
+                        interactionListener.onDownloadClicked(message, stickerFile.id);
+                    }
+                }
+            }
         } else {
-            layoutMediaContainer.setVisibility(View.GONE);
-            layoutDocumentContainer.setVisibility(View.GONE);
             tvMessageText.setVisibility(View.VISIBLE);
-            tvMessageText.setText(getMessageContentText(message));
+            tvMessageText.setText(TelegramMessageFormatter.formatMessagePreview(message));
+        }
+    }
+
+    private void bindAudioPlayback(
+        View flAudioAction, ProgressBar pbAudioLoading, ImageView ivAudioPlayPause,
+        ProgressBar pbAudioPlayback, TextView tvAudioSubtitle,
+        TdApi.Message message, TdApi.File audioFile, String defaultSubtitle
+    ) {
+        boolean isCompleted = audioFile != null && audioFile.local != null && audioFile.local.isDownloadingCompleted && audioFile.local.path != null && !audioFile.local.path.isEmpty();
+        boolean isDownloading = audioFile != null && audioFile.local != null && audioFile.local.isDownloadingActive;
+
+        if (isDownloading) {
+            pbAudioLoading.setVisibility(View.VISIBLE);
+            ivAudioPlayPause.setVisibility(View.GONE);
+        } else {
+            pbAudioLoading.setVisibility(View.GONE);
+            ivAudioPlayPause.setVisibility(View.VISIBLE);
+
+            if (isCompleted) {
+                boolean playing = TelegramAudioPlayer.getInstance().isPlaying(message.id);
+                ivAudioPlayPause.setImageResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
+            } else {
+                ivAudioPlayPause.setImageResource(R.drawable.ic_download);
+            }
+        }
+
+        flAudioAction.setOnClickListener(v -> {
+            if (isSelectionMode) {
+                toggleSelection(message.id);
+                return;
+            }
+
+            if (!isCompleted) {
+                if (interactionListener != null && audioFile != null) {
+                    interactionListener.onDownloadClicked(message, audioFile.id);
+                }
+                return;
+            }
+
+            TelegramAudioPlayer.getInstance().play(message.id, audioFile.local.path, new TelegramAudioPlayer.PlaybackListener() {
+                @Override
+                public void onProgress(long msgId, int currentMs, int totalMs) {
+                    if (msgId == message.id && totalMs > 0) {
+                        int progress = (int) (((long) currentMs * 1000) / totalMs);
+                        pbAudioPlayback.setProgress(progress);
+                        int curSec = currentMs / 1000;
+                        int totSec = totalMs / 1000;
+                        tvAudioSubtitle.setText(TelegramMediaHelper.formatDuration(curSec) + " / " + TelegramMediaHelper.formatDuration(totSec));
+                    }
+                }
+
+                @Override
+                public void onPlaybackStateChanged(long msgId, boolean isPlaying) {
+                    if (msgId == message.id) {
+                        ivAudioPlayPause.setImageResource(isPlaying ? R.drawable.ic_pause : R.drawable.ic_play);
+                        if (!isPlaying) {
+                            tvAudioSubtitle.setText(defaultSubtitle);
+                            pbAudioPlayback.setProgress(0);
+                        }
+                    }
+                }
+
+                @Override
+                public void onPlaybackCompleted(long msgId) {
+                    if (msgId == message.id) {
+                        ivAudioPlayPause.setImageResource(R.drawable.ic_play);
+                        tvAudioSubtitle.setText(defaultSubtitle);
+                        pbAudioPlayback.setProgress(0);
+                    }
+                }
+            });
+        });
+    }
+
+    private void bindMediaPhotoOrVideo(
+        View layoutMediaContainer, ImageView ivMediaPhoto, View flMediaDownload,
+        ProgressBar pbMediaDownload, ImageView ivMediaDownloadIcon,
+        TdApi.Message message, TdApi.File file, String mimeType
+    ) {
+        if (file != null && file.local != null && file.local.isDownloadingCompleted && file.local.path != null && !file.local.path.isEmpty()) {
+            flMediaDownload.setVisibility(View.GONE);
+            android.graphics.Bitmap bmp = TelegramMediaHelper.decodeSampledBitmap(file.local.path, 480, 480);
+            if (bmp != null) {
+                ivMediaPhoto.setImageBitmap(bmp);
+            }
+            layoutMediaContainer.setOnClickListener(v -> {
+                if (isSelectionMode) {
+                    toggleSelection(message.id);
+                } else if (interactionListener != null) {
+                    interactionListener.onMediaClicked(message, file, mimeType);
+                }
+            });
+        } else {
+            flMediaDownload.setVisibility(View.VISIBLE);
+            ivMediaPhoto.setImageDrawable(null);
+            boolean isDownloading = file != null && file.local != null && file.local.isDownloadingActive;
+            pbMediaDownload.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
+            ivMediaDownloadIcon.setVisibility(isDownloading ? View.GONE : View.VISIBLE);
+
+            final int targetFileId = (file != null) ? file.id : 0;
+            flMediaDownload.setOnClickListener(v -> {
+                if (interactionListener != null && targetFileId > 0) {
+                    interactionListener.onDownloadClicked(message, targetFileId);
+                }
+            });
         }
     }
 
@@ -935,9 +1084,25 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
     private String getSenderDisplayName(TdApi.MessageSender sender) {
         if (sender instanceof TdApi.MessageSenderUser) {
-            return "User " + ((TdApi.MessageSenderUser) sender).userId;
+            long uid = ((TdApi.MessageSenderUser) sender).userId;
+            String cached = senderNameCache.get(uid);
+            if (cached != null) {
+                return cached;
+            }
+            if (interactionListener != null) {
+                interactionListener.onRequestSenderName(sender);
+            }
+            return "User";
         } else if (sender instanceof TdApi.MessageSenderChat) {
-            return "Chat " + ((TdApi.MessageSenderChat) sender).chatId;
+            long cid = ((TdApi.MessageSenderChat) sender).chatId;
+            String cached = senderNameCache.get(cid);
+            if (cached != null) {
+                return cached;
+            }
+            if (interactionListener != null) {
+                interactionListener.onRequestSenderName(sender);
+            }
+            return "Channel";
         }
         return "Member";
     }
@@ -952,6 +1117,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
     static class OutgoingViewHolder extends RecyclerView.ViewHolder {
         final View messageRoot;
+        final View bubbleLayout;
         final TextView tvMessageText;
         final TextView tvMessageTime;
         final TextView tvEditedLabel;
@@ -975,9 +1141,21 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         final TextView tvDocFileName;
         final TextView tvDocFileSize;
 
+        final View layoutAudioContainer;
+        final View flAudioAction;
+        final ProgressBar pbAudioLoading;
+        final ImageView ivAudioPlayPause;
+        final TextView tvAudioTitle;
+        final ProgressBar pbAudioPlayback;
+        final TextView tvAudioSubtitle;
+
+        final View layoutStickerContainer;
+        final ImageView ivSticker;
+
         OutgoingViewHolder(@NonNull View itemView) {
             super(itemView);
             messageRoot = itemView.findViewById(R.id.messageRoot);
+            bubbleLayout = itemView.findViewById(R.id.bubbleOutgoing);
             tvMessageText = itemView.findViewById(R.id.tvMessageText);
             tvMessageTime = itemView.findViewById(R.id.tvMessageTime);
             tvEditedLabel = itemView.findViewById(R.id.tvEditedLabel);
@@ -1000,11 +1178,23 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             ivDocIcon = itemView.findViewById(R.id.ivDocIcon);
             tvDocFileName = itemView.findViewById(R.id.tvDocFileName);
             tvDocFileSize = itemView.findViewById(R.id.tvDocFileSize);
+
+            layoutAudioContainer = itemView.findViewById(R.id.layoutAudioContainer);
+            flAudioAction = itemView.findViewById(R.id.flAudioAction);
+            pbAudioLoading = itemView.findViewById(R.id.pbAudioLoading);
+            ivAudioPlayPause = itemView.findViewById(R.id.ivAudioPlayPause);
+            tvAudioTitle = itemView.findViewById(R.id.tvAudioTitle);
+            pbAudioPlayback = itemView.findViewById(R.id.pbAudioPlayback);
+            tvAudioSubtitle = itemView.findViewById(R.id.tvAudioSubtitle);
+
+            layoutStickerContainer = itemView.findViewById(R.id.layoutStickerContainer);
+            ivSticker = itemView.findViewById(R.id.ivSticker);
         }
     }
 
     static class IncomingViewHolder extends RecyclerView.ViewHolder {
         final View messageRoot;
+        final View bubbleLayout;
         final TextView tvSenderName;
         final TextView tvMessageText;
         final TextView tvMessageTime;
@@ -1028,9 +1218,21 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         final TextView tvDocFileName;
         final TextView tvDocFileSize;
 
+        final View layoutAudioContainer;
+        final View flAudioAction;
+        final ProgressBar pbAudioLoading;
+        final ImageView ivAudioPlayPause;
+        final TextView tvAudioTitle;
+        final ProgressBar pbAudioPlayback;
+        final TextView tvAudioSubtitle;
+
+        final View layoutStickerContainer;
+        final ImageView ivSticker;
+
         IncomingViewHolder(@NonNull View itemView) {
             super(itemView);
             messageRoot = itemView.findViewById(R.id.messageRoot);
+            bubbleLayout = itemView.findViewById(R.id.bubbleIncoming);
             tvSenderName = itemView.findViewById(R.id.tvSenderName);
             tvMessageText = itemView.findViewById(R.id.tvMessageText);
             tvMessageTime = itemView.findViewById(R.id.tvMessageTime);
@@ -1053,6 +1255,17 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             ivDocIcon = itemView.findViewById(R.id.ivDocIcon);
             tvDocFileName = itemView.findViewById(R.id.tvDocFileName);
             tvDocFileSize = itemView.findViewById(R.id.tvDocFileSize);
+
+            layoutAudioContainer = itemView.findViewById(R.id.layoutAudioContainer);
+            flAudioAction = itemView.findViewById(R.id.flAudioAction);
+            pbAudioLoading = itemView.findViewById(R.id.pbAudioLoading);
+            ivAudioPlayPause = itemView.findViewById(R.id.ivAudioPlayPause);
+            tvAudioTitle = itemView.findViewById(R.id.tvAudioTitle);
+            pbAudioPlayback = itemView.findViewById(R.id.pbAudioPlayback);
+            tvAudioSubtitle = itemView.findViewById(R.id.tvAudioSubtitle);
+
+            layoutStickerContainer = itemView.findViewById(R.id.layoutStickerContainer);
+            ivSticker = itemView.findViewById(R.id.ivSticker);
         }
     }
 }

@@ -605,4 +605,93 @@ public class TdLibAccountClient {
     public void cancelDownloadFile(int fileId, boolean onlyIfPending, Client.ResultHandler handler) {
         send(new TdApi.CancelDownloadFile(fileId, onlyIfPending), handler);
     }
+
+    /**
+     * Sends a voice note message through TDLib.
+     */
+    public void sendVoiceNote(long chatId, long replyToMessageId, String filePath, int duration, byte[] waveform, String caption, Client.ResultHandler handler) {
+        TdApi.InputFile voiceFile = new TdApi.InputFileLocal(filePath);
+        TdApi.InputVoiceNote inputVoice = new TdApi.InputVoiceNote(voiceFile, duration, waveform != null ? waveform : new byte[0]);
+        TdApi.FormattedText captionFormatted = (caption != null && !caption.isEmpty())
+            ? new TdApi.FormattedText(caption, new TdApi.TextEntity[0])
+            : null;
+        TdApi.InputMessageVoiceNote content = new TdApi.InputMessageVoiceNote(inputVoice, captionFormatted, null);
+        TdApi.InputMessageReplyTo replyTo = (replyToMessageId > 0)
+            ? new TdApi.InputMessageReplyToMessage(replyToMessageId, null, 0, null)
+            : null;
+        send(new TdApi.SendMessage(chatId, null, replyTo, null, null, content), handler);
+    }
+
+    /**
+     * Sends a music / audio file through TDLib.
+     */
+    public void sendAudio(long chatId, long replyToMessageId, String filePath, int duration, String title, String performer, String caption, Client.ResultHandler handler) {
+        TdApi.InputFile audioFile = new TdApi.InputFileLocal(filePath);
+        TdApi.InputAudio inputAudio = new TdApi.InputAudio(audioFile, null, duration, title, performer);
+        TdApi.FormattedText captionFormatted = (caption != null && !caption.isEmpty())
+            ? new TdApi.FormattedText(caption, new TdApi.TextEntity[0])
+            : null;
+        TdApi.InputMessageAudio content = new TdApi.InputMessageAudio(inputAudio, captionFormatted);
+        TdApi.InputMessageReplyTo replyTo = (replyToMessageId > 0)
+            ? new TdApi.InputMessageReplyToMessage(replyToMessageId, null, 0, null)
+            : null;
+        send(new TdApi.SendMessage(chatId, null, replyTo, null, null, content), handler);
+    }
+
+    /**
+     * Sends a sticker from installed sticker set.
+     */
+    public void sendSticker(long chatId, long replyToMessageId, int stickerFileId, int width, int height, String emoji, Client.ResultHandler handler) {
+        TdApi.InputFile file = new TdApi.InputFileId(stickerFileId);
+        TdApi.InputSticker inputSticker = new TdApi.InputSticker(file, null, width, height);
+        TdApi.InputMessageSticker content = new TdApi.InputMessageSticker(inputSticker, emoji != null ? emoji : "");
+        TdApi.InputMessageReplyTo replyTo = (replyToMessageId > 0)
+            ? new TdApi.InputMessageReplyToMessage(replyToMessageId, null, 0, null)
+            : null;
+        send(new TdApi.SendMessage(chatId, null, replyTo, null, null, content), handler);
+    }
+
+    /**
+     * Sends an animation / GIF message.
+     */
+    public void sendAnimation(long chatId, long replyToMessageId, String filePath, int width, int height, int duration, String caption, Client.ResultHandler handler) {
+        TdApi.InputFile animFile = new TdApi.InputFileLocal(filePath);
+        TdApi.InputAnimation inputAnim = new TdApi.InputAnimation(animFile, null, new int[0], duration, width, height);
+        TdApi.FormattedText captionFormatted = (caption != null && !caption.isEmpty())
+            ? new TdApi.FormattedText(caption, new TdApi.TextEntity[0])
+            : null;
+        TdApi.InputMessageAnimation content = new TdApi.InputMessageAnimation(inputAnim, captionFormatted, false, false);
+        TdApi.InputMessageReplyTo replyTo = (replyToMessageId > 0)
+            ? new TdApi.InputMessageReplyToMessage(replyToMessageId, null, 0, null)
+            : null;
+        send(new TdApi.SendMessage(chatId, null, replyTo, null, null, content), handler);
+    }
+
+    /**
+     * Retrieves installed sticker sets from TDLib.
+     */
+    public void getInstalledStickerSets(Client.ResultHandler handler) {
+        send(new TdApi.GetInstalledStickerSets(new TdApi.StickerTypeRegular()), handler);
+    }
+
+    /**
+     * Retrieves a full sticker set by set ID.
+     */
+    public void getStickerSet(long setId, Client.ResultHandler handler) {
+        send(new TdApi.GetStickerSet(setId), handler);
+    }
+
+    /**
+     * Retrieves saved animations / GIFs.
+     */
+    public void getSavedAnimations(Client.ResultHandler handler) {
+        send(new TdApi.GetSavedAnimations(), handler);
+    }
+
+    /**
+     * Retrieves user details.
+     */
+    public void getUser(long userId, Client.ResultHandler handler) {
+        send(new TdApi.GetUser(userId), handler);
+    }
 }
