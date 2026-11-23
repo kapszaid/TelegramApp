@@ -15,6 +15,10 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -30,6 +34,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.drinkless.tdlib.TdApi;
 
 public class ContactsActivity extends AppCompatActivity {
@@ -53,6 +61,7 @@ public class ContactsActivity extends AppCompatActivity {
     private final ConcurrentHashMap<Long, TdApi.User> contactsMap = new ConcurrentHashMap<>();
     private final List<TdApi.User> displayUsers = new ArrayList<>();
     private String currentSearchQuery = "";
+    private final ExecutorService filterExecutor = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,9 +69,32 @@ public class ContactsActivity extends AppCompatActivity {
         setContentView(R.layout.activity_contacts);
 
         initViews();
+        setupWindowInsets();
         resolveAccountClient();
         setupRecyclerView();
         loadContacts();
+    }
+
+    private void setupWindowInsets() {
+        View root = findViewById(R.id.contactsCoordinatorLayout);
+        if (root != null) {
+            ViewCompat.setOnApplyWindowInsetsListener(root, (v, windowInsets) -> {
+                Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+                View appBar = findViewById(R.id.appBarContacts);
+                if (appBar != null) {
+                    appBar.setPadding(0, insets.top, 0, 0);
+                }
+                if (fabAddContact != null) {
+                    CoordinatorLayout.LayoutParams params = (CoordinatorLayout.LayoutParams) fabAddContact.getLayoutParams();
+                    if (params != null) {
+                        int baseMargin = (int) (16 * getResources().getDisplayMetrics().density);
+                        params.bottomMargin = insets.bottom + baseMargin;
+                        fabAddContact.setLayoutParams(params);
+                    }
+                }
+                return windowInsets;
+            });
+        }
     }
 
     private void initViews() {
@@ -134,64 +166,100 @@ public class ContactsActivity extends AppCompatActivity {
         }
 
         client.getContacts(result -> {
+            if (!(result instanceof TdApi.Users)) {
+                runOnUiThread(() -> {
+                    swipeRefresh.setRefreshing(false);
+                    progressBar.setVisibility(View.GONE);
+                    if (result instanceof TdApi.Error) {
+                        Toast.makeText(this, "Failed to load contacts: " + ((TdApi.Error) result).message, Toast.LENGTH_SHORT).show();
+                    }
+                });
+                return;
+            }
+
+            long[] userIds = ((TdApi.Users) result).userIds;
             runOnUiThread(() -> {
                 swipeRefresh.setRefreshing(false);
-                progressBar.setVisibility(View.GONE);
+                toolbar.setSubtitle(userIds.length + " contacts");
+                if (userIds.length == 0) {
+                    progressBar.setVisibility(View.GONE);
+                    applyFilterAndSort();
+                }
+            });
 
-                if (result instanceof TdApi.Users) {
-                    long[] userIds = ((TdApi.Users) result).userIds;
-                    toolbar.setSubtitle(userIds.length + " contacts");
-                    if (userIds.length == 0) {
-                        applyFilterAndSort();
-                        return;
+            if (userIds.length == 0) return;
+
+            final int total = userIds.length;
+            final AtomicInteger completed = new AtomicInteger(0);
+            final AtomicBoolean updateScheduled = new AtomicBoolean(false);
+
+            for (long uid : userIds) {
+                client.getUser(uid, uRes -> {
+                    if (uRes instanceof TdApi.User) {
+                        TdApi.User u = (TdApi.User) uRes;
+                        contactsMap.put(u.id, u);
                     }
+                    int count = completed.incrementAndGet();
 
-                    for (long uid : userIds) {
-                        client.getUser(uid, uRes -> {
-                            if (uRes instanceof TdApi.User) {
-                                TdApi.User u = (TdApi.User) uRes;
-                                contactsMap.put(u.id, u);
-                                runOnUiThread(this::applyFilterAndSort);
+                    // Throttle updates: fast initial batches (20, 50), then every 100, and final completion
+                    boolean shouldUpdate = (count == 20 || count == 50 || count % 100 == 0 || count >= total);
+                    if (shouldUpdate && !updateScheduled.getAndSet(true)) {
+                        runOnUiThread(() -> {
+                            updateScheduled.set(false);
+                            if (completed.get() >= total) {
+                                progressBar.setVisibility(View.GONE);
                             }
+                            applyFilterAndSort();
                         });
                     }
-                } else if (result instanceof TdApi.Error) {
-                    Toast.makeText(this, "Failed to load contacts: " + ((TdApi.Error) result).message, Toast.LENGTH_SHORT).show();
-                    applyFilterAndSort();
+                });
+            }
+        });
+    }
+
+    private void applyFilterAndSort() {
+        final String query = currentSearchQuery;
+        final List<TdApi.User> snapshot = new ArrayList<>(contactsMap.values());
+
+        filterExecutor.execute(() -> {
+            List<TdApi.User> filtered = new ArrayList<>();
+            for (TdApi.User u : snapshot) {
+                if (u == null) continue;
+                String name = (u.firstName != null ? u.firstName : "") + " " + (u.lastName != null ? u.lastName : "");
+                name = name.toLowerCase(Locale.getDefault());
+                String phone = u.phoneNumber != null ? u.phoneNumber : "";
+
+                if (query.isEmpty() || name.contains(query) || phone.contains(query)) {
+                    filtered.add(u);
+                }
+            }
+
+            Collections.sort(filtered, (u1, u2) -> {
+                String n1 = (u1.firstName != null ? u1.firstName : "") + (u1.lastName != null ? u1.lastName : "");
+                String n2 = (u2.firstName != null ? u2.firstName : "") + (u2.lastName != null ? u2.lastName : "");
+                return n1.compareToIgnoreCase(n2);
+            });
+
+            runOnUiThread(() -> {
+                displayUsers.clear();
+                displayUsers.addAll(filtered);
+                adapter.updateUsers(displayUsers);
+
+                if (displayUsers.isEmpty()) {
+                    layoutEmpty.setVisibility(View.VISIBLE);
+                    rvContacts.setVisibility(View.GONE);
+                } else {
+                    layoutEmpty.setVisibility(View.GONE);
+                    rvContacts.setVisibility(View.VISIBLE);
                 }
             });
         });
     }
 
-    private synchronized void applyFilterAndSort() {
-        List<TdApi.User> filtered = new ArrayList<>();
-        for (TdApi.User u : contactsMap.values()) {
-            String name = (u.firstName != null ? u.firstName : "") + " " + (u.lastName != null ? u.lastName : "");
-            name = name.toLowerCase(Locale.getDefault());
-            String phone = u.phoneNumber != null ? u.phoneNumber : "";
-
-            if (currentSearchQuery.isEmpty() || name.contains(currentSearchQuery) || phone.contains(currentSearchQuery)) {
-                filtered.add(u);
-            }
-        }
-
-        Collections.sort(filtered, (u1, u2) -> {
-            String n1 = (u1.firstName != null ? u1.firstName : "") + (u1.lastName != null ? u1.lastName : "");
-            String n2 = (u2.firstName != null ? u2.firstName : "") + (u2.lastName != null ? u2.lastName : "");
-            return n1.compareToIgnoreCase(n2);
-        });
-
-        displayUsers.clear();
-        displayUsers.addAll(filtered);
-        adapter.updateUsers(displayUsers);
-
-        if (displayUsers.isEmpty()) {
-            layoutEmpty.setVisibility(View.VISIBLE);
-            rvContacts.setVisibility(View.GONE);
-        } else {
-            layoutEmpty.setVisibility(View.GONE);
-            rvContacts.setVisibility(View.VISIBLE);
-        }
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        filterExecutor.shutdown();
     }
 
     private void openChatWithUser(TdApi.User user) {
@@ -208,6 +276,7 @@ public class ContactsActivity extends AppCompatActivity {
                     intent.putExtra("chat_title", chat.title != null ? chat.title : user.firstName);
                     intent.putExtra("account_id", accountId);
                     startActivity(intent);
+                    finish();
                 } else if (result instanceof TdApi.Error) {
                     Toast.makeText(this, "Cannot open chat: " + ((TdApi.Error) result).message, Toast.LENGTH_SHORT).show();
                 }

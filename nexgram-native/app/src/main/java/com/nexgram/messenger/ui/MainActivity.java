@@ -69,6 +69,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
 
     private CoordinatorLayout mainCoordinatorLayout;
+    private com.google.android.material.appbar.AppBarLayout appBarLayout;
     private Toolbar toolbar;
     private LinearLayout layoutSearchBar;
     private EditText etSearchQuery;
@@ -152,6 +153,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void initViews() {
         mainCoordinatorLayout = findViewById(R.id.mainCoordinatorLayout);
+        appBarLayout = findViewById(R.id.appBarLayout);
         toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
@@ -233,7 +235,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupWindowInsets() {
-        ViewCompat.setOnApplyWindowInsetsListener(mainCoordinatorLayout, (v, windowInsets) -> windowInsets);
+        ViewCompat.setOnApplyWindowInsetsListener(mainCoordinatorLayout, (v, windowInsets) -> {
+            Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+
+            // 1. Pad AppBarLayout so toolbar and search never touch or hide behind system status bar
+            appBarLayout.setPadding(0, insets.top, 0, 0);
+
+            // 2. Set bottom margin on bottomNavMain so it sits cleanly ABOVE the system navigation bar
+            CoordinatorLayout.LayoutParams navParams = (CoordinatorLayout.LayoutParams) bottomNav.getLayoutParams();
+            if (navParams != null) {
+                navParams.bottomMargin = insets.bottom;
+                bottomNav.setLayoutParams(navParams);
+            }
+
+            // 3. Lift FAB above the bottom navigation bar (64dp bar + 16dp spacing = 80dp)
+            CoordinatorLayout.LayoutParams fabParams = (CoordinatorLayout.LayoutParams) fabNewChat.getLayoutParams();
+            if (fabParams != null) {
+                int baseFabOffset = (int) (80 * getResources().getDisplayMetrics().density);
+                fabParams.bottomMargin = insets.bottom + baseFabOffset;
+                fabNewChat.setLayoutParams(fabParams);
+            }
+
+            return windowInsets;
+        });
     }
 
     private void setupBottomNavigation() {
@@ -567,21 +591,33 @@ public class MainActivity extends AppCompatActivity {
     private void loadContactsUsers(long[] userIds) {
         List<TdApi.User> loaded = new ArrayList<>();
         int total = userIds.length;
+        java.util.concurrent.atomic.AtomicInteger completed = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicBoolean updateScheduled = new java.util.concurrent.atomic.AtomicBoolean(false);
+
         for (long id : userIds) {
             activeClient.getUser(id, obj -> {
                 if (obj instanceof TdApi.User) {
                     synchronized (loaded) {
                         loaded.add((TdApi.User) obj);
-                        if (loaded.size() == total) {
-                            runOnUiThread(() -> {
-                                contactsList.clear();
-                                contactsList.addAll(loaded);
-                                contactAdapter.setUsers(contactsList);
-                                layoutEmptyContactsMain.setVisibility(View.GONE);
-                                rvContactsMain.setVisibility(View.VISIBLE);
-                            });
-                        }
                     }
+                }
+                int count = completed.incrementAndGet();
+                boolean shouldUpdate = (count == 20 || count == 50 || count % 100 == 0 || count >= total);
+                if (shouldUpdate && !updateScheduled.getAndSet(true)) {
+                    runOnUiThread(() -> {
+                        updateScheduled.set(false);
+                        synchronized (loaded) {
+                            contactsList.clear();
+                            contactsList.addAll(loaded);
+                        }
+                        contactAdapter.setUsers(new ArrayList<>(contactsList));
+                        boolean isEmpty = contactsList.isEmpty() && completed.get() >= total;
+                        layoutEmptyContactsMain.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+                        rvContactsMain.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
+                        if (completed.get() >= total) {
+                            pbContactsMain.setVisibility(View.GONE);
+                        }
+                    });
                 }
             });
         }
