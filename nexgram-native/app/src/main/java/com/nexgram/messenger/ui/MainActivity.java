@@ -55,6 +55,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -75,8 +76,27 @@ public class MainActivity extends AppCompatActivity {
     private EditText etSearchQuery;
     private ImageView btnCloseSearch;
     private TabLayout tabLayoutFolders;
-    private BottomNavigationView bottomNav;
     private FloatingActionButton fabNewChat;
+
+    // Official Telegram Floating Pill Navigation Views
+    private androidx.cardview.widget.CardView cardFloatingBottomNav;
+    private View tabChats;
+    private View tabContacts;
+    private View tabSettings;
+    private View tabProfile;
+    private View bgNavChatsPill;
+    private View bgNavContactsPill;
+    private View bgNavSettingsPill;
+    private View bgNavProfilePill;
+    private ImageView ivNavChats;
+    private ImageView ivNavContacts;
+    private ImageView ivNavSettings;
+    private TextView tvNavProfileAvatar;
+    private TextView tvNavChats;
+    private TextView tvNavContacts;
+    private TextView tvNavSettings;
+    private TextView tvNavProfile;
+    private TextView tvNavChatsBadge;
 
     // Tab Containers
     private FrameLayout tabContainerChats;
@@ -161,8 +181,27 @@ public class MainActivity extends AppCompatActivity {
         etSearchQuery = findViewById(R.id.etSearchQuery);
         btnCloseSearch = findViewById(R.id.btnCloseSearch);
         tabLayoutFolders = findViewById(R.id.tabLayoutFolders);
-        bottomNav = findViewById(R.id.bottomNavMain);
         fabNewChat = findViewById(R.id.fabNewChat);
+
+        // Official Telegram Floating Pill Navigation Views
+        cardFloatingBottomNav = findViewById(R.id.cardFloatingBottomNav);
+        tabChats = findViewById(R.id.tab_chats);
+        tabContacts = findViewById(R.id.tab_contacts);
+        tabSettings = findViewById(R.id.tab_settings);
+        tabProfile = findViewById(R.id.tab_profile);
+        bgNavChatsPill = findViewById(R.id.bgNavChatsPill);
+        bgNavContactsPill = findViewById(R.id.bgNavContactsPill);
+        bgNavSettingsPill = findViewById(R.id.bgNavSettingsPill);
+        bgNavProfilePill = findViewById(R.id.bgNavProfilePill);
+        ivNavChats = findViewById(R.id.ivNavChats);
+        ivNavContacts = findViewById(R.id.ivNavContacts);
+        ivNavSettings = findViewById(R.id.ivNavSettings);
+        tvNavProfileAvatar = findViewById(R.id.tvNavProfileAvatar);
+        tvNavChats = findViewById(R.id.tvNavChats);
+        tvNavContacts = findViewById(R.id.tvNavContacts);
+        tvNavSettings = findViewById(R.id.tvNavSettings);
+        tvNavProfile = findViewById(R.id.tvNavProfile);
+        tvNavChatsBadge = findViewById(R.id.tvNavChatsBadge);
 
         tabContainerChats = findViewById(R.id.tabContainerChats);
         tabContainerContacts = findViewById(R.id.tabContainerContacts);
@@ -241,19 +280,25 @@ public class MainActivity extends AppCompatActivity {
             // 1. Pad AppBarLayout so toolbar and search never touch or hide behind system status bar
             appBarLayout.setPadding(0, insets.top, 0, 0);
 
-            // 2. Set bottom margin on bottomNavMain so it sits cleanly ABOVE the system navigation bar
-            CoordinatorLayout.LayoutParams navParams = (CoordinatorLayout.LayoutParams) bottomNav.getLayoutParams();
-            if (navParams != null) {
-                navParams.bottomMargin = insets.bottom;
-                bottomNav.setLayoutParams(navParams);
+            // 2. Set bottom margin on the floating pill so it floats comfortably above the system navigation bar
+            int baseBottomMargin = (int) (12 * getResources().getDisplayMetrics().density);
+            if (cardFloatingBottomNav != null) {
+                CoordinatorLayout.LayoutParams navParams = (CoordinatorLayout.LayoutParams) cardFloatingBottomNav.getLayoutParams();
+                if (navParams != null) {
+                    navParams.bottomMargin = insets.bottom + baseBottomMargin;
+                    cardFloatingBottomNav.setLayoutParams(navParams);
+                }
             }
 
-            // 3. Lift FAB above the bottom navigation bar (64dp bar + 16dp spacing = 80dp)
-            CoordinatorLayout.LayoutParams fabParams = (CoordinatorLayout.LayoutParams) fabNewChat.getLayoutParams();
-            if (fabParams != null) {
-                int baseFabOffset = (int) (80 * getResources().getDisplayMetrics().density);
-                fabParams.bottomMargin = insets.bottom + baseFabOffset;
-                fabNewChat.setLayoutParams(fabParams);
+            // 3. Lift FAB above the floating pill navigation bar
+            if (fabNewChat != null) {
+                CoordinatorLayout.LayoutParams fabParams = (CoordinatorLayout.LayoutParams) fabNewChat.getLayoutParams();
+                if (fabParams != null) {
+                    int baseFabMargin = (int) (16 * getResources().getDisplayMetrics().density);
+                    int navHeight = (int) (58 * getResources().getDisplayMetrics().density);
+                    fabParams.bottomMargin = insets.bottom + baseBottomMargin + navHeight + baseFabMargin;
+                    fabNewChat.setLayoutParams(fabParams);
+                }
             }
 
             return windowInsets;
@@ -261,12 +306,41 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupBottomNavigation() {
-        bottomNav.setOnItemSelectedListener(item -> {
-            int id = item.getItemId();
-            currentTabId = id;
-            switchTab(id);
-            return true;
-        });
+        if (tabChats != null) tabChats.setOnClickListener(v -> selectNavigationTab(R.id.tab_chats));
+        if (tabContacts != null) tabContacts.setOnClickListener(v -> selectNavigationTab(R.id.tab_contacts));
+        if (tabSettings != null) tabSettings.setOnClickListener(v -> selectNavigationTab(R.id.tab_settings));
+        if (tabProfile != null) tabProfile.setOnClickListener(v -> selectNavigationTab(R.id.tab_profile));
+        selectNavigationTab(R.id.tab_chats);
+    }
+
+    private void selectNavigationTab(int tabId) {
+        currentTabId = tabId;
+
+        boolean isChats = tabId == R.id.tab_chats;
+        boolean isContacts = tabId == R.id.tab_contacts;
+        boolean isSettings = tabId == R.id.tab_settings;
+        boolean isProfile = tabId == R.id.tab_profile;
+
+        if (bgNavChatsPill != null) bgNavChatsPill.setVisibility(isChats ? View.VISIBLE : View.GONE);
+        if (bgNavContactsPill != null) bgNavContactsPill.setVisibility(isContacts ? View.VISIBLE : View.GONE);
+        if (bgNavSettingsPill != null) bgNavSettingsPill.setVisibility(isSettings ? View.VISIBLE : View.GONE);
+        if (bgNavProfilePill != null) bgNavProfilePill.setVisibility(isProfile ? View.VISIBLE : View.GONE);
+
+        int activeColor = 0xFF2AABEE;
+        int inactiveColor = 0xFFB0C4D6;
+
+        if (ivNavChats != null) ivNavChats.setColorFilter(isChats ? activeColor : inactiveColor);
+        if (tvNavChats != null) tvNavChats.setTextColor(isChats ? activeColor : inactiveColor);
+
+        if (ivNavContacts != null) ivNavContacts.setColorFilter(isContacts ? activeColor : inactiveColor);
+        if (tvNavContacts != null) tvNavContacts.setTextColor(isContacts ? activeColor : inactiveColor);
+
+        if (ivNavSettings != null) ivNavSettings.setColorFilter(isSettings ? activeColor : inactiveColor);
+        if (tvNavSettings != null) tvNavSettings.setTextColor(isSettings ? activeColor : inactiveColor);
+
+        if (tvNavProfile != null) tvNavProfile.setTextColor(isProfile ? activeColor : inactiveColor);
+
+        switchTab(tabId);
     }
 
     private void switchTab(int tabId) {
@@ -648,6 +722,10 @@ public class MainActivity extends AppCompatActivity {
 
             tvTabProfileAvatarInitials.setText(TelegramAvatarHelper.getInitials(active.name));
             ivTabProfileAvatarCircle.setColorFilter(TelegramAvatarHelper.getAvatarColor(Math.abs((active.name != null ? active.name : active.id).hashCode())));
+            if (tvNavProfileAvatar != null) {
+                String initials = TelegramAvatarHelper.getInitials(active.name);
+                tvNavProfileAvatar.setText(initials.isEmpty() ? "Z" : initials.substring(0, 1).toUpperCase(Locale.getDefault()));
+            }
 
             if (active.avatarPath != null && !active.avatarPath.isEmpty() && new File(active.avatarPath).exists()) {
                 try {
@@ -910,6 +988,26 @@ public class MainActivity extends AppCompatActivity {
         displayChats.clear();
         displayChats.addAll(filtered);
         if (chatAdapter != null) chatAdapter.notifyDataSetChanged();
+        updateChatsTabBadge();
+    }
+
+    private void updateChatsTabBadge() {
+        if (tvNavChatsBadge == null) return;
+        int unread = 0;
+        for (TdApi.Chat chat : allChatsMap.values()) {
+            if (chat != null && chat.unreadCount > 0) {
+                unread += chat.unreadCount;
+            }
+        }
+        final int finalUnread = unread;
+        runOnUiThread(() -> {
+            if (finalUnread > 0) {
+                tvNavChatsBadge.setVisibility(View.VISIBLE);
+                tvNavChatsBadge.setText(finalUnread > 999 ? "999+" : String.valueOf(finalUnread));
+            } else {
+                tvNavChatsBadge.setVisibility(View.GONE);
+            }
+        });
     }
 
     private long getChatOrder(TdApi.Chat chat) {
@@ -1006,7 +1104,7 @@ public class MainActivity extends AppCompatActivity {
         if (isSearching) {
             closeSearchMode();
         } else if (currentTabId != R.id.tab_chats) {
-            bottomNav.setSelectedItemId(R.id.tab_chats);
+            selectNavigationTab(R.id.tab_chats);
         } else {
             super.onBackPressed();
         }
